@@ -1,0 +1,12 @@
+services:
+  smart-music-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: smart-music-studio:latest
+    container_name: smart-music-studio
+    ports:
+      - "${APP_PORT:-80}:80"
+    env_file:
+      - .env.example
+    restart: unless-stopped

@@ -1,0 +1,27 @@
+{
+  "name": "Smart Music Studio",
+  "short_name": "Music Studio",
+  "description": "Realtime smart instrument studio with chord pads, mixer, recorder, and offline support.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#05070b",
+  "theme_color": "#05070b",
+  "categories": ["music", "productivity", "entertainment"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open Studio",
+      "url": "/",
+      "description": "Open the Smart Music Studio performance surface"
+    }
+  ]
+}
