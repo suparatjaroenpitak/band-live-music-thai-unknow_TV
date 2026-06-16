@@ -6,11 +6,14 @@ import { RecorderControls } from "../Recorder/RecorderControls";
 export function TransportBar() {
   const bpm = useStudioStore((state) => state.bpm);
   const setBpm = useStudioStore((state) => state.setBpm);
+  const mixer = useStudioStore((state) => state.mixer);
+  const currentInstrument = useStudioStore((state) => state.currentInstrument);
   const transportPlaying = useStudioStore((state) => state.transportPlaying);
   const setTransportPlaying = useStudioStore((state) => state.setTransportPlaying);
 
-  const toggleTransport = () => {
+  const toggleTransport = async () => {
     const next = !transportPlaying;
+    await audioEngine.ensureReady(currentInstrument, mixer, bpm);
     audioEngine.setTransportPlaying(next);
     setTransportPlaying(next);
   };
@@ -50,7 +53,7 @@ export function TransportBar() {
 
           <button
             className="grid size-10 place-items-center rounded-lg border border-cyan-200/30 bg-cyan-300 text-studio-ink transition hover:bg-cyan-200"
-            onClick={toggleTransport}
+            onClick={() => void toggleTransport()}
             aria-label={transportPlaying ? "Pause transport" : "Play transport"}
             title={transportPlaying ? "Pause" : "Play"}
           >

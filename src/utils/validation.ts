@@ -15,15 +15,35 @@ export function clamp(value: number, min: number, max: number) {
 }
 
 export function validateMixer(mixer: Partial<MixerState>): MixerState {
+  const reverbWet = clamp(Number(mixer.reverbWet ?? mixer.reverb ?? 0.24), 0, 1);
+  const delayMix = clamp(Number(mixer.delayMix ?? mixer.delay ?? 0.12), 0, 1);
+  const chorusMix = clamp(Number(mixer.chorusMix ?? mixer.chorus ?? 0.1), 0, 1);
+
   return {
     masterVolume: clamp(Number(mixer.masterVolume ?? 0.82), 0, 1),
     instrumentVolume: clamp(Number(mixer.instrumentVolume ?? 0.86), 0, 1),
-    reverb: clamp(Number(mixer.reverb ?? 0.24), 0, 1),
-    delay: clamp(Number(mixer.delay ?? 0.12), 0, 1),
-    chorus: clamp(Number(mixer.chorus ?? 0.1), 0, 1),
+    pan: clamp(Number(mixer.pan ?? 0), -1, 1),
+    muted: Boolean(mixer.muted ?? false),
+    solo: Boolean(mixer.solo ?? false),
+    reverbRoomSize: clamp(Number(mixer.reverbRoomSize ?? 0.42), 0, 1),
+    reverbWet,
+    reverbDry: clamp(Number(mixer.reverbDry ?? 0.88), 0, 1),
+    delayTime: clamp(Number(mixer.delayTime ?? 0.24), 0.02, 1.2),
+    delayFeedback: clamp(Number(mixer.delayFeedback ?? 0.22), 0, 0.92),
+    delayMix,
+    chorusDepth: clamp(Number(mixer.chorusDepth ?? 0.32), 0, 1),
+    chorusRate: clamp(Number(mixer.chorusRate ?? 2.4), 0.1, 8),
+    chorusMix,
+    reverb: reverbWet,
+    delay: delayMix,
+    chorus: chorusMix,
     eqLow: clamp(Number(mixer.eqLow ?? 0), -12, 12),
     eqMid: clamp(Number(mixer.eqMid ?? 0), -12, 12),
     eqHigh: clamp(Number(mixer.eqHigh ?? 0), -12, 12),
+    compressorThreshold: clamp(Number(mixer.compressorThreshold ?? -8 - Number(mixer.compressor ?? 0.35) * 32), -48, 0),
+    compressorRatio: clamp(Number(mixer.compressorRatio ?? 3), 1, 20),
+    compressorAttack: clamp(Number(mixer.compressorAttack ?? 0.003), 0.001, 0.12),
+    compressorRelease: clamp(Number(mixer.compressorRelease ?? 0.25), 0.02, 1.4),
     compressor: clamp(Number(mixer.compressor ?? 0.35), 0, 1),
     limiter: clamp(Number(mixer.limiter ?? 0.95), 0, 1)
   };

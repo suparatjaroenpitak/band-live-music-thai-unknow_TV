@@ -41,7 +41,7 @@ interface StudioState {
   setBpm: (bpm: number) => void;
   setPlayMode: (mode: PlayMode) => void;
   setTransportPlaying: (playing: boolean) => void;
-  setMixerValue: (key: keyof MixerState, value: number) => void;
+  setMixerValue: <K extends keyof MixerState>(key: K, value: MixerState[K]) => void;
   addChord: (name: string) => void;
   updateChord: (id: string, name: string) => void;
   removeChord: (id: string) => void;
@@ -209,8 +209,16 @@ export const useStudioStore = create<StudioState>()(
     }),
     {
       name: "smart-music-studio",
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persisted) => {
+        if (!persisted || typeof persisted !== "object") return persisted;
+        const state = persisted as Partial<StudioState>;
+        return {
+          ...state,
+          mixer: validateMixer(state.mixer ?? {})
+        };
+      },
       partialize: (state) => ({
         projectName: state.projectName,
         chords: state.chords,

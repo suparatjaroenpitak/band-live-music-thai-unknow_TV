@@ -59,4 +59,12 @@ input[type="range"] {
 
 .touch-none {
   touch-action: none;
+  overscroll-behavior: contain;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.touch-none * {
+  -webkit-user-select: none;
+  user-select: none;
 }

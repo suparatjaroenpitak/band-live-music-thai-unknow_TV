@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useStudioStore } from "../../store/useStudioStore";
 import { getInstrument } from "../../utils/instruments";
-import { InstrumentSelector } from "./InstrumentSelector";
+import { InstrumentBrowser } from "../InstrumentBrowser/InstrumentBrowser";
 
 export function InstrumentView() {
   const currentInstrument = useStudioStore((state) => state.currentInstrument);
@@ -14,7 +14,7 @@ export function InstrumentView() {
     <section className="grid gap-4 lg:grid-cols-[minmax(280px,360px)_1fr]">
       <div className="space-y-3">
         <h2 className="text-lg font-semibold text-white">Instrument</h2>
-        <InstrumentSelector />
+        <InstrumentBrowser />
       </div>
 
       <div className="relative min-h-48 overflow-hidden rounded-lg border border-white/10 bg-white/[0.05] p-5 shadow-pad">
@@ -26,11 +26,11 @@ export function InstrumentView() {
             transition={{ type: "spring", stiffness: 260, damping: 20 }}
           >
             <div className="absolute left-0 right-0 top-1/2 h-4 -translate-y-1/2 rounded-full bg-slate-950/80 shadow-lg" />
-            {Array.from({ length: instrument.family === "keys" ? 12 : 6 }, (_, index) => (
+            {Array.from({ length: instrument.family === "piano" ? 12 : 6 }, (_, index) => (
               <motion.span
                 key={index}
                 className="absolute left-2 right-2 h-[2px] rounded-full bg-slate-200/80"
-                style={{ top: 18 + index * (instrument.family === "keys" ? 7 : 14) }}
+                style={{ top: 18 + index * (instrument.family === "piano" ? 7 : 14) }}
                 animate={{
                   x: currentChord ? [0, index % 2 ? 3 : -3, 0] : 0,
                   opacity: currentChord ? [0.8, 1, 0.8] : 0.72

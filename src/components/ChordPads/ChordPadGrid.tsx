@@ -1,7 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Download, GripVertical, Plus, Save, Trash2, Upload } from "lucide-react";
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
-import { audioEngine } from "../../audio/ToneEngine";
 import { chordNameToNotes } from "../../audio/chords";
 import { useStableRateLimiter } from "../../hooks/useStableRateLimiter";
 import { useStudioStore } from "../../store/useStudioStore";
@@ -10,6 +9,7 @@ import { downloadJson } from "../../utils/download";
 import { createId } from "../../utils/ids";
 import { sanitizeInput } from "../../utils/sanitize";
 import { isValidChordName, validateChordPads } from "../../utils/validation";
+import { SustainIndicator, useSustainEngine } from "../SustainEngine/SustainEngine";
 
 interface Ripple {
   id: string;
@@ -19,18 +19,12 @@ interface Ripple {
 
 export function ChordPadGrid() {
   const chords = useStudioStore((state) => state.chords);
-  const mixer = useStudioStore((state) => state.mixer);
-  const bpm = useStudioStore((state) => state.bpm);
-  const currentInstrument = useStudioStore((state) => state.currentInstrument);
-  const playMode = useStudioStore((state) => state.playMode);
   const currentChord = useStudioStore((state) => state.currentChord);
-  const setCurrentChord = useStudioStore((state) => state.setCurrentChord);
   const addChord = useStudioStore((state) => state.addChord);
   const updateChord = useStudioStore((state) => state.updateChord);
   const removeChord = useStudioStore((state) => state.removeChord);
   const reorderChord = useStudioStore((state) => state.reorderChord);
   const setChordSet = useStudioStore((state) => state.setChordSet);
-  const addPerformanceEvent = useStudioStore((state) => state.addPerformanceEvent);
   const [draftChord, setDraftChord] = useState("Cadd9");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
@@ -40,22 +34,6 @@ export function ChordPadGrid() {
   const canMutate = useStableRateLimiter(24, 4_000);
 
   const activeChordName = useMemo(() => chords.find((chord) => chord.id === currentChord)?.name, [chords, currentChord]);
-
-  const playChord = async (chord: ChordPad, event: React.PointerEvent<HTMLButtonElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setCurrentChord(chord.id);
-    addRipple(chord.id, event);
-    await audioEngine.ensureReady(currentInstrument, mixer, bpm);
-    const notes = audioEngine.playChord(chord.name, playMode);
-    addPerformanceEvent({
-      chordName: chord.name,
-      notes,
-      mode: playMode,
-      instrument: currentInstrument,
-      durationMs: playMode === "autoPattern" ? 1_400 : 900
-    });
-    window.navigator.vibrate?.(8);
-  };
 
   const addRipple = (chordId: string, event: React.PointerEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -97,7 +75,7 @@ export function ChordPadGrid() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="mr-auto">
           <h2 className="text-lg font-semibold text-white">Chord Pads</h2>
-          <p className="text-xs text-slate-400">{chords.length} pads ready {activeChordName ? `· ${activeChordName}` : ""}</p>
+          <p className="text-xs text-slate-400">{chords.length} pads ready {activeChordName ? `/ ${activeChordName}` : ""}</p>
         </div>
 
         <div className="flex min-w-0 flex-1 basis-72 items-center gap-2 sm:flex-none">
@@ -114,6 +92,7 @@ export function ChordPadGrid() {
             disabled={!isValidChordName(draftChord)}
             aria-label="Add chord"
             title="Add chord"
+            type="button"
           >
             <Plus size={18} />
           </button>
@@ -124,6 +103,7 @@ export function ChordPadGrid() {
           onClick={() => downloadJson(chords, "smart-chord-set.json")}
           aria-label="Export chord set"
           title="Export chord set"
+          type="button"
         >
           <Download size={18} />
         </button>
@@ -132,6 +112,7 @@ export function ChordPadGrid() {
           onClick={() => importRef.current?.click()}
           aria-label="Import chord set"
           title="Import chord set"
+          type="button"
         >
           <Upload size={18} />
         </button>
@@ -157,51 +138,18 @@ export function ChordPadGrid() {
                 setDraggingId(null);
               }}
             >
-              <button
-                className={`touch-none relative h-28 w-full overflow-hidden rounded-lg border p-3 text-left shadow-pad transition ${
-                  currentChord === chord.id
-                    ? "border-cyan-200/80 bg-cyan-300/18"
-                    : "border-white/10 bg-white/[0.06] hover:border-cyan-200/40 hover:bg-white/[0.09]"
-                }`}
-                onPointerDown={(event) => void playChord(chord, event)}
-                onPointerUp={() => window.setTimeout(() => setCurrentChord(null), 90)}
-                aria-label={`Play ${chord.name}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <GripVertical size={16} className="mt-1 shrink-0 text-slate-500" />
-                  <span className="rounded-md bg-black/20 px-2 py-1 text-[11px] font-semibold text-slate-300">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                </div>
-
-                {editingId === chord.id ? (
-                  <input
-                    className="mt-3 w-full rounded-md border border-cyan-200/50 bg-black/40 px-2 py-1 text-center text-2xl font-black text-white outline-none"
-                    value={editingValue}
-                    autoFocus
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onChange={(event) => setEditingValue(sanitizeInput(event.target.value, 24))}
-                    onBlur={() => saveEdit(chord.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") saveEdit(chord.id);
-                      if (event.key === "Escape") setEditingId(null);
-                    }}
-                    aria-label={`Edit ${chord.name}`}
-                  />
-                ) : (
-                  <div className="mt-3 truncate text-center text-3xl font-black text-white">{chord.name}</div>
-                )}
-
-                <div className="mt-2 truncate text-center text-xs text-slate-400">{chordNameToNotes(chord.name).join(" · ")}</div>
-
-                {(ripples[chord.id] ?? []).map((ripple) => (
-                  <span
-                    key={ripple.id}
-                    className="pointer-events-none absolute size-10 animate-[ping_520ms_ease-out] rounded-full bg-cyan-200/30"
-                    style={{ left: ripple.x - 20, top: ripple.y - 20 }}
-                  />
-                ))}
-              </button>
+              <ChordPadButton
+                chord={chord}
+                index={index}
+                active={currentChord === chord.id}
+                editing={editingId === chord.id}
+                editingValue={editingValue}
+                ripples={ripples[chord.id] ?? []}
+                onRipple={(event) => addRipple(chord.id, event)}
+                onEditValue={setEditingValue}
+                onSaveEdit={() => saveEdit(chord.id)}
+                onCancelEdit={() => setEditingId(null)}
+              />
 
               <div className="absolute bottom-2 right-2 flex gap-1">
                 <button
@@ -212,6 +160,7 @@ export function ChordPadGrid() {
                   }}
                   aria-label={`Edit ${chord.name}`}
                   title="Edit chord"
+                  type="button"
                 >
                   <Save size={15} />
                 </button>
@@ -221,6 +170,7 @@ export function ChordPadGrid() {
                   disabled={chords.length <= 1}
                   aria-label={`Delete ${chord.name}`}
                   title="Delete chord"
+                  type="button"
                 >
                   <Trash2 size={15} />
                 </button>
@@ -230,5 +180,88 @@ export function ChordPadGrid() {
         </AnimatePresence>
       </div>
     </section>
+  );
+}
+
+function ChordPadButton({
+  chord,
+  index,
+  active,
+  editing,
+  editingValue,
+  ripples,
+  onRipple,
+  onEditValue,
+  onSaveEdit,
+  onCancelEdit
+}: {
+  chord: ChordPad;
+  index: number;
+  active: boolean;
+  editing: boolean;
+  editingValue: string;
+  ripples: Ripple[];
+  onRipple: (event: React.PointerEvent<HTMLButtonElement>) => void;
+  onEditValue: (value: string) => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+}) {
+  const sustain = useSustainEngine({ chord, onPointerStart: onRipple });
+
+  return (
+    <button
+      className={`touch-none relative h-28 w-full overflow-hidden rounded-lg border p-3 text-left shadow-pad transition ${
+        sustain.isSustaining
+          ? "border-emerald-200/90 bg-emerald-300/20 shadow-[0_0_34px_rgba(110,231,183,0.22)]"
+          : active || sustain.isPressed
+            ? "border-cyan-200/80 bg-cyan-300/18"
+            : "border-white/10 bg-white/[0.06] hover:border-cyan-200/40 hover:bg-white/[0.09]"
+      }`}
+      {...sustain.handlers}
+      aria-label={`Play ${chord.name}`}
+      type="button"
+    >
+      <SustainIndicator active={sustain.isSustaining} />
+      <div className="flex items-start justify-between gap-2">
+        <GripVertical size={16} className="mt-1 shrink-0 text-slate-500" />
+        <span className="rounded-md bg-black/20 px-2 py-1 text-[11px] font-semibold text-slate-300">
+          {String(index + 1).padStart(2, "0")}
+        </span>
+      </div>
+
+      {editing ? (
+        <input
+          className="mt-3 w-full rounded-md border border-cyan-200/50 bg-black/40 px-2 py-1 text-center text-2xl font-black text-white outline-none"
+          value={editingValue}
+          autoFocus
+          onPointerDown={(event) => event.stopPropagation()}
+          onChange={(event) => onEditValue(sanitizeInput(event.target.value, 24))}
+          onBlur={onSaveEdit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") onSaveEdit();
+            if (event.key === "Escape") onCancelEdit();
+          }}
+          aria-label={`Edit ${chord.name}`}
+        />
+      ) : (
+        <div className="mt-3 truncate text-center text-3xl font-black text-white">{chord.name}</div>
+      )}
+
+      <div className="mt-2 truncate text-center text-xs text-slate-400">{chordNameToNotes(chord.name).join(" / ")}</div>
+
+      {sustain.isSustaining ? (
+        <span className="absolute bottom-3 left-3 rounded-md border border-emerald-200/30 bg-emerald-300/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-100">
+          Sustain
+        </span>
+      ) : null}
+
+      {ripples.map((ripple) => (
+        <span
+          key={ripple.id}
+          className="pointer-events-none absolute size-10 animate-[ping_520ms_ease-out] rounded-full bg-cyan-200/30"
+          style={{ left: ripple.x - 20, top: ripple.y - 20 }}
+        />
+      ))}
+    </button>
   );
 }

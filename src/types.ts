@@ -9,7 +9,7 @@ export type PlayMode =
 export type InstrumentFamily =
   | "guitar"
   | "ukulele"
-  | "keys"
+  | "piano"
   | "strings"
   | "choir"
   | "synth"
@@ -21,6 +21,7 @@ export type InstrumentId =
   | "nylon-guitar"
   | "steel-guitar"
   | "electric-guitar"
+  | "distortion-guitar"
   | "clean-guitar"
   | "jazz-guitar"
   | "ukulele"
@@ -42,6 +43,7 @@ export interface InstrumentDefinition {
   id: InstrumentId;
   name: string;
   family: InstrumentFamily;
+  category: "Guitar" | "Bass" | "Piano" | "Strings" | "Synth" | "Choir" | "Drums";
   color: string;
   tags: string[];
 }
@@ -54,14 +56,40 @@ export interface ChordPad {
 export interface MixerState {
   masterVolume: number;
   instrumentVolume: number;
+  pan: number;
+  muted: boolean;
+  solo: boolean;
+  reverbRoomSize: number;
+  reverbWet: number;
+  reverbDry: number;
+  delayTime: number;
+  delayFeedback: number;
+  delayMix: number;
+  chorusDepth: number;
+  chorusRate: number;
+  chorusMix: number;
   reverb: number;
   delay: number;
   chorus: number;
   eqLow: number;
   eqMid: number;
   eqHigh: number;
+  compressorThreshold: number;
+  compressorRatio: number;
+  compressorAttack: number;
+  compressorRelease: number;
   compressor: number;
   limiter: number;
+}
+
+export type AudioUnlockStatus = "locked" | "initializing" | "loading" | "ready" | "error";
+
+export interface GuitarStringNote {
+  stringNumber: 1 | 2 | 3 | 4 | 5 | 6;
+  openNote: "E" | "B" | "G" | "D" | "A";
+  note: string | null;
+  fret: number | null;
+  muted: boolean;
 }
 
 export interface PerformanceEvent {

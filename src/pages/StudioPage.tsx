@@ -1,10 +1,12 @@
 import { useEffect } from "react";
+import { AudioUnlock } from "../components/AudioUnlock/AudioUnlock";
 import { ChordPadGrid } from "../components/ChordPads/ChordPadGrid";
-import { EffectsPanel } from "../components/Effects/EffectsPanel";
+import { EffectsPanel } from "../components/EffectsPanel/EffectsPanel";
 import { InstrumentView } from "../components/InstrumentSelector/InstrumentView";
-import { MixerPanel } from "../components/Mixer/MixerPanel";
+import { MixerPanel } from "../components/MixerPanel/MixerPanel";
 import { ProjectActions } from "../components/Project/ProjectActions";
 import { RecorderControls } from "../components/Recorder/RecorderControls";
+import { SmartGuitar } from "../components/SmartGuitar/SmartGuitar";
 import { TransportBar } from "../components/Transport/TransportBar";
 import { audioEngine } from "../audio/ToneEngine";
 import { useAutoSave } from "../hooks/useAutoSave";
@@ -37,7 +39,7 @@ export default function StudioPage() {
   }, [bpm]);
 
   useEffect(() => {
-    audioEngine.setInstrument(currentInstrument);
+    void audioEngine.setInstrument(currentInstrument);
   }, [currentInstrument]);
 
   return (
@@ -48,6 +50,7 @@ export default function StudioPage() {
         <div className="min-w-0 space-y-4">
           <ProjectActions />
           <InstrumentView />
+          <AudioUnlock />
 
           <section className="rounded-lg border border-white/10 bg-white/[0.05] p-3 shadow-pad">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
@@ -67,6 +70,7 @@ export default function StudioPage() {
             </div>
           </section>
 
+          <SmartGuitar />
           <ChordPadGrid />
         </div>
 
