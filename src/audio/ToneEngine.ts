@@ -39,11 +39,11 @@ class SmartAudioEngine {
   private currentInstrument: InstrumentId = "acoustic-guitar";
   private currentSampler: any = null;
   private fallbackSynth: any = null;
+  private booted = false;
   private readonly samplerCache = new Map<InstrumentId, any>();
   private readonly samplerPromises = new Map<InstrumentId, Promise<any>>();
   private readonly sustainVoices = new Map<string, SustainVoice>();
   private readonly listeners = new Set<StatusListener>();
-  private unlockPromise: Promise<void> | null = null;
   private status: AudioUnlockStatus = "locked";
   private statusMessage = "Tap to start audio";
 
@@ -62,32 +62,17 @@ class SmartAudioEngine {
   }
 
   async ensureReady(instrument: InstrumentId, mixer: MixerState, bpm: number) {
-    if (this.status === "ready" && this.masterVolume) {
-      if (this.currentSampler) return;
-    }
-    await this.unlockFromGesture(instrument, mixer, bpm);
+    if (this.booted && this.masterVolume) return;
+    this.boot(instrument, mixer, bpm);
   }
 
   async unlockFromGesture(instrument: InstrumentId, mixer: MixerState, bpm: number) {
-    if (this.status === "ready" && this.masterVolume) {
+    if (this.booted && this.masterVolume) {
       this.setBpm(bpm);
       this.updateMixer(mixer);
       return;
     }
-    if (this.unlockPromise) return this.unlockPromise;
-    this.unlockPromise = this.bootAudio(instrument, mixer, bpm);
-    try {
-      await this.unlockPromise;
-    } finally {
-      this.unlockPromise = null;
-    }
-  }
-
-  async preloadInstrument(instrument: InstrumentId) {
-    if (!this.Tone || !this.masterVolume) return;
-    this.setStatus("loading", `Loading ${instrument.replaceAll("-", " ")}`);
-    await this.loadSampler(instrument);
-    if (this.status !== "error") this.setStatus("ready", "Audio Ready");
+    this.boot(instrument, mixer, bpm);
   }
 
   setBpm(bpm: number) {
@@ -96,7 +81,7 @@ class SmartAudioEngine {
   }
 
   setTransportPlaying(playing: boolean) {
-    if (!this.Tone || this.status !== "ready") return;
+    if (!this.Tone || !this.booted) return;
     if (playing) this.Tone.Transport.start();
     else {
       this.Tone.Transport.stop();
@@ -107,7 +92,7 @@ class SmartAudioEngine {
 
   setInstrument(instrument: InstrumentId) {
     this.currentInstrument = instrument;
-    if (!this.Tone || !this.instrumentVolume || this.status === "locked") return;
+    if (!this.Tone || !this.instrumentVolume) return;
     this.loadSampler(instrument).then((sampler) => {
       if (this.currentInstrument !== instrument) return;
       if (this.currentSampler && this.currentSampler !== sampler) {
@@ -117,7 +102,6 @@ class SmartAudioEngine {
       sampler.disconnect?.();
       sampler.connect(this.instrumentVolume);
       this.currentSampler = sampler;
-      if (this.status !== "ready") this.setStatus("ready", "Audio Ready");
     }).catch(() => undefined);
   }
 
@@ -150,7 +134,7 @@ class SmartAudioEngine {
 
   playChord(chordName: string, mode: PlayMode) {
     const notes = this.getPlayableNotes(chordName);
-    if (!this.Tone || !this.masterVolume || this.status !== "ready") return notes;
+    if (!this.Tone || !this.masterVolume) return notes;
 
     if (this.currentInstrument === "drum-kit") {
       this.playDrums(mode);
@@ -191,7 +175,7 @@ class SmartAudioEngine {
 
   startSustainChord(chordName: string, sustainId: string) {
     const notes = this.getPlayableNotes(chordName);
-    if (!this.Tone || !this.masterVolume || this.status !== "ready") return notes;
+    if (!this.Tone || !this.masterVolume) return notes;
     if (this.currentInstrument === "drum-kit") {
       this.playDrums("chord");
       return notes;
@@ -222,7 +206,7 @@ class SmartAudioEngine {
 
   playGuitarString(chordName: string, stringIndex: number, palmMute = false) {
     const string = chordNameToGuitarStrings(chordName)[stringIndex];
-    if (!string?.note || !this.Tone || !this.masterVolume || this.status !== "ready") return string?.note ?? null;
+    if (!string?.note || !this.Tone || !this.masterVolume) return string?.note ?? null;
 
     if (this.currentSampler) {
       this.currentSampler.triggerAttackRelease(string.note, palmMute ? "32n" : "8n", this.Tone.now(), palmMute ? 0.45 : 0.65);
@@ -236,7 +220,7 @@ class SmartAudioEngine {
     const strings = chordNameToGuitarStrings(chordName).filter((s) => s.note);
     const ordered = direction === "down" ? [...strings].reverse() : strings;
     const notes = ordered.map((s) => s.note as string);
-    if (!this.Tone || !this.masterVolume || this.status !== "ready") return notes;
+    if (!this.Tone || !this.masterVolume) return notes;
 
     if (this.currentSampler) {
       this.triggerStrum(notes, direction, this.Tone.now(), palmMute);
@@ -247,7 +231,7 @@ class SmartAudioEngine {
   }
 
   async startRecording() {
-    if (!this.Tone || !this.masterVolume || this.status !== "ready") return;
+    if (!this.Tone || !this.masterVolume || !this.booted) return;
     if (!this.recorder) {
       this.recorder = new this.Tone.Recorder();
       this.masterVolume.connect(this.recorder);
@@ -281,34 +265,27 @@ class SmartAudioEngine {
     this.wetGain?.dispose();
   }
 
-  private async bootAudio(instrument: InstrumentId, mixer: MixerState, bpm: number) {
-    try {
-      this.setStatus("initializing", "Starting...");
+  private boot(instrument: InstrumentId, mixer: MixerState, bpm: number) {
+    if (this.booted) return;
+    this.booted = true;
 
-      this.samplerCache.forEach((s) => s.dispose?.());
-      this.samplerCache.clear();
-      this.samplerPromises.clear();
-      this.currentSampler = null;
+    getTone().then((Tone) => {
+      this.Tone = Tone;
 
-      if (!this.Tone) this.Tone = await getTone();
-      this.Tone.Transport.stop();
-      this.Tone.Transport.cancel();
-      await this.Tone.start();
+      Tone.start().catch(() => undefined);
 
-      if (this.masterVolume) this.disposeEffects();
       this.createEffectsChain();
 
       this.setBpm(bpm);
       this.updateMixer(mixer);
-
       this.currentInstrument = instrument;
-      this.setStatus("ready", "Loading sounds...");
+
+      this.setStatus("ready", "Audio Ready");
       this.setInstrument(instrument);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "Audio failed";
-      this.setStatus("error", msg);
-      throw error;
-    }
+    }).catch(() => {
+      this.booted = false;
+      this.setStatus("error", "Audio failed");
+    });
   }
 
   private playFallback(notes: string[]) {
@@ -324,31 +301,6 @@ class SmartAudioEngine {
     this.fallbackSynth.releaseAll?.(0.01);
     const now = this.Tone.now();
     this.fallbackSynth.triggerAttackRelease(notes, "8n", now, 0.4);
-  }
-
-  private disposeEffects() {
-    this.reverb?.dispose();
-    this.delay?.dispose();
-    this.chorus?.dispose();
-    this.eq?.dispose();
-    this.compressor?.dispose();
-    this.limiter?.dispose();
-    this.masterVolume?.dispose();
-    this.instrumentVolume?.dispose();
-    this.pan?.dispose();
-    this.dryGain?.dispose();
-    this.wetGain?.dispose();
-    this.reverb = null;
-    this.delay = null;
-    this.chorus = null;
-    this.eq = null;
-    this.compressor = null;
-    this.limiter = null;
-    this.masterVolume = null;
-    this.instrumentVolume = null;
-    this.pan = null;
-    this.dryGain = null;
-    this.wetGain = null;
   }
 
   private createEffectsChain() {
