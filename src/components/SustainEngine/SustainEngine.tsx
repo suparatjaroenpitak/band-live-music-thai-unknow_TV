@@ -21,7 +21,6 @@ export function useSustainEngine({ chord, onPointerStart, holdDelayMs = 230 }: U
   const holdTimer = useRef<number | null>(null);
   const activePointer = useRef<number | null>(null);
   const pressedAt = useRef(0);
-  const readyPromise = useRef<Promise<void> | null>(null);
   const sustainingRef = useRef(false);
 
   const clearHoldTimer = useCallback(() => {
@@ -31,8 +30,7 @@ export function useSustainEngine({ chord, onPointerStart, holdDelayMs = 230 }: U
     }
   }, []);
 
-  const startSustain = useCallback(async () => {
-    await readyPromise.current;
+  const startSustain = useCallback(() => {
     if (activePointer.current === null) return;
     const notes = audioEngine.startSustainChord(chord.name, chord.id);
     sustainingRef.current = true;
@@ -58,19 +56,18 @@ export function useSustainEngine({ chord, onPointerStart, holdDelayMs = 230 }: U
       setIsSustaining(false);
       setCurrentChord(chord.id);
       onPointerStart?.(event);
-      readyPromise.current = audioEngine.ensureReady(currentInstrument, mixer, bpm);
+      void audioEngine.ensureReady(currentInstrument, mixer, bpm);
       clearHoldTimer();
-      holdTimer.current = window.setTimeout(() => void startSustain(), holdDelayMs);
+      holdTimer.current = window.setTimeout(() => startSustain(), holdDelayMs);
     },
     [bpm, chord.id, clearHoldTimer, currentInstrument, holdDelayMs, mixer, onPointerStart, setCurrentChord, startSustain]
   );
 
   const finishPointer = useCallback(
-    async (event?: React.PointerEvent<HTMLButtonElement>) => {
+    (event?: React.PointerEvent<HTMLButtonElement>) => {
       if (event && activePointer.current !== event.pointerId) return;
       if (event?.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       clearHoldTimer();
-      await readyPromise.current?.catch(() => undefined);
 
       if (sustainingRef.current) {
         audioEngine.stopSustainChord(chord.id);
@@ -112,7 +109,7 @@ export function useSustainEngine({ chord, onPointerStart, holdDelayMs = 230 }: U
     isSustaining,
     handlers: {
       onPointerDown,
-      onPointerUp: (event: React.PointerEvent<HTMLButtonElement>) => void finishPointer(event),
+      onPointerUp: (event: React.PointerEvent<HTMLButtonElement>) => finishPointer(event),
       onPointerCancel,
       onLostPointerCapture: () => {
         if (activePointer.current !== null) {

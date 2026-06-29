@@ -15,7 +15,6 @@ const IOS = typeof navigator !== "undefined" && /iP(hone|ad|od)/.test(navigator.
 const ANDROID = typeof navigator !== "undefined" && /Android/.test(navigator.userAgent);
 
 let tonePromise: Promise<ToneModule> | null = null;
-
 function getTone(): Promise<ToneModule> {
   if (!tonePromise) tonePromise = import("tone");
   return tonePromise;
@@ -39,6 +38,7 @@ class SmartAudioEngine {
   private activeLoop: any = null;
   private currentInstrument: InstrumentId = "acoustic-guitar";
   private currentSampler: any = null;
+  private fallbackSynth: any = null;
   private readonly samplerCache = new Map<InstrumentId, any>();
   private readonly samplerPromises = new Map<InstrumentId, Promise<any>>();
   private readonly sustainVoices = new Map<string, SustainVoice>();
@@ -46,12 +46,9 @@ class SmartAudioEngine {
   private unlockPromise: Promise<void> | null = null;
   private status: AudioUnlockStatus = "locked";
   private statusMessage = "Tap to start audio";
-  private bootAttempts = 0;
 
   constructor() {
-    getTone().then((T) => {
-      this.Tone = T;
-    }).catch(() => undefined);
+    getTone().then((T) => { this.Tone = T; }).catch(() => undefined);
   }
 
   getStatus() {
@@ -61,29 +58,23 @@ class SmartAudioEngine {
   subscribe(listener: StatusListener) {
     this.listeners.add(listener);
     listener(this.status, this.statusMessage);
-    return () => {
-      this.listeners.delete(listener);
-    };
+    return () => { this.listeners.delete(listener); };
   }
 
   async ensureReady(instrument: InstrumentId, mixer: MixerState, bpm: number) {
-    if (this.status === "ready" && this.currentSampler) {
-      this.setBpm(bpm);
-      this.updateMixer(mixer);
-      return;
+    if (this.status === "ready" && this.masterVolume) {
+      if (this.currentSampler) return;
     }
     await this.unlockFromGesture(instrument, mixer, bpm);
   }
 
   async unlockFromGesture(instrument: InstrumentId, mixer: MixerState, bpm: number) {
-    if (this.status === "ready" && this.currentSampler) {
+    if (this.status === "ready" && this.masterVolume) {
       this.setBpm(bpm);
       this.updateMixer(mixer);
       return;
     }
-
     if (this.unlockPromise) return this.unlockPromise;
-
     this.unlockPromise = this.bootAudio(instrument, mixer, bpm);
     try {
       await this.unlockPromise;
@@ -114,21 +105,20 @@ class SmartAudioEngine {
     }
   }
 
-  async setInstrument(instrument: InstrumentId) {
+  setInstrument(instrument: InstrumentId) {
     this.currentInstrument = instrument;
     if (!this.Tone || !this.instrumentVolume || this.status === "locked") return;
-
-    this.setStatus("loading", `Loading ${instrument.replaceAll("-", " ")}`);
-    const sampler = await this.loadSampler(instrument);
-    if (this.currentInstrument !== instrument) return;
-    if (this.currentSampler && this.currentSampler !== sampler) {
-      this.currentSampler.releaseAll?.();
-      this.currentSampler.disconnect?.();
-    }
-    sampler.disconnect?.();
-    sampler.connect(this.instrumentVolume);
-    this.currentSampler = sampler;
-    this.setStatus("ready", "Audio Ready");
+    this.loadSampler(instrument).then((sampler) => {
+      if (this.currentInstrument !== instrument) return;
+      if (this.currentSampler && this.currentSampler !== sampler) {
+        this.currentSampler.releaseAll?.();
+        this.currentSampler.disconnect?.();
+      }
+      sampler.disconnect?.();
+      sampler.connect(this.instrumentVolume);
+      this.currentSampler = sampler;
+      if (this.status !== "ready") this.setStatus("ready", "Audio Ready");
+    }).catch(() => undefined);
   }
 
   updateMixer(mixer: MixerState) {
@@ -140,22 +130,17 @@ class SmartAudioEngine {
     this.pan.pan.rampTo(mixer.pan, 0.035);
     this.dryGain.gain.rampTo(mixer.reverbDry, 0.05);
     this.wetGain.gain.rampTo(mixer.reverbWet, 0.05);
-
     this.reverb.decay = 0.35 + mixer.reverbRoomSize * 7.5;
     this.reverb.wet.rampTo(1, 0.05);
-
     this.delay.delayTime.rampTo(mixer.delayTime, 0.04);
     this.delay.feedback.rampTo(mixer.delayFeedback, 0.04);
     this.delay.wet.rampTo(mixer.delayMix, 0.04);
-
     this.chorus.depth = mixer.chorusDepth;
     this.chorus.frequency.rampTo(mixer.chorusRate, 0.04);
     this.chorus.wet.rampTo(mixer.chorusMix, 0.04);
-
     this.eq.low.rampTo(mixer.eqLow, 0.06);
     this.eq.mid.rampTo(mixer.eqMid, 0.06);
     this.eq.high.rampTo(mixer.eqHigh, 0.06);
-
     this.compressor.threshold.rampTo(mixer.compressorThreshold, 0.05);
     this.compressor.ratio.rampTo(mixer.compressorRatio, 0.05);
     this.compressor.attack.rampTo(mixer.compressorAttack, 0.05);
@@ -165,36 +150,39 @@ class SmartAudioEngine {
 
   playChord(chordName: string, mode: PlayMode) {
     const notes = this.getPlayableNotes(chordName);
-    if (!this.Tone || !this.currentSampler || this.status !== "ready") return notes;
+    if (!this.Tone || !this.masterVolume || this.status !== "ready") return notes;
 
     if (this.currentInstrument === "drum-kit") {
       this.playDrums(mode);
       return notes;
     }
 
-    const now = this.Tone.now();
-    const velocity = 0.82;
-
-    switch (mode) {
-      case "arpeggio":
-        notes.forEach((note, index) => this.currentSampler.triggerAttackRelease(note, "8n", now + index * 0.075, velocity));
-        break;
-      case "fingerstyle":
-        this.playFingerstyle(notes, now, velocity);
-        break;
-      case "strumDown":
-        this.triggerStrum(notes, "down", now, false);
-        break;
-      case "strumUp":
-        this.triggerStrum(notes, "up", now, false);
-        break;
-      case "autoPattern":
-        this.playAutoPattern(notes, now, velocity);
-        break;
-      case "chord":
-      default:
-        this.currentSampler.triggerAttackRelease(notes, "2n", now, velocity);
-        break;
+    if (this.currentSampler) {
+      const now = this.Tone.now();
+      const velocity = 0.82;
+      switch (mode) {
+        case "arpeggio":
+          notes.forEach((note, i) => this.currentSampler.triggerAttackRelease(note, "8n", now + i * 0.075, velocity));
+          break;
+        case "fingerstyle":
+          this.playFingerstyle(notes, now, velocity);
+          break;
+        case "strumDown":
+          this.triggerStrum(notes, "down", now, false);
+          break;
+        case "strumUp":
+          this.triggerStrum(notes, "up", now, false);
+          break;
+        case "autoPattern":
+          this.playAutoPattern(notes, now, velocity);
+          break;
+        case "chord":
+        default:
+          this.currentSampler.triggerAttackRelease(notes, "2n", now, velocity);
+          break;
+      }
+    } else {
+      this.playFallback(notes);
     }
 
     return notes;
@@ -202,15 +190,19 @@ class SmartAudioEngine {
 
   startSustainChord(chordName: string, sustainId: string) {
     const notes = this.getPlayableNotes(chordName);
-    if (!this.Tone || !this.currentSampler || this.status !== "ready") return notes;
+    if (!this.Tone || !this.masterVolume || this.status !== "ready") return notes;
     if (this.currentInstrument === "drum-kit") {
       this.playDrums("chord");
       return notes;
     }
 
     this.stopSustainChord(sustainId);
-    this.currentSampler.triggerAttack(notes, this.Tone.now(), 0.82);
-    this.sustainVoices.set(sustainId, { notes, sampler: this.currentSampler });
+    if (this.currentSampler) {
+      this.currentSampler.triggerAttack(notes, this.Tone.now(), 0.82);
+      this.sustainVoices.set(sustainId, { notes, sampler: this.currentSampler });
+    } else {
+      this.playFallback(notes);
+    }
     return notes;
   }
 
@@ -228,19 +220,27 @@ class SmartAudioEngine {
 
   playGuitarString(chordName: string, stringIndex: number, palmMute = false) {
     const string = chordNameToGuitarStrings(chordName)[stringIndex];
-    if (!string?.note || !this.Tone || !this.currentSampler || this.status !== "ready") return string?.note ?? null;
-    const now = this.Tone.now();
-    this.currentSampler.triggerAttackRelease(string.note, palmMute ? "32n" : "8n", now, palmMute ? 0.58 : 0.84);
+    if (!string?.note || !this.Tone || !this.masterVolume || this.status !== "ready") return string?.note ?? null;
+
+    if (this.currentSampler) {
+      this.currentSampler.triggerAttackRelease(string.note, palmMute ? "32n" : "8n", this.Tone.now(), palmMute ? 0.58 : 0.84);
+    } else {
+      this.playFallback([string.note]);
+    }
     return string.note;
   }
 
   strumGuitar(chordName: string, direction: StrumDirection, palmMute = false) {
-    const strings = chordNameToGuitarStrings(chordName).filter((string) => string.note);
+    const strings = chordNameToGuitarStrings(chordName).filter((s) => s.note);
     const ordered = direction === "down" ? [...strings].reverse() : strings;
-    const notes = ordered.map((string) => string.note as string);
-    if (!this.Tone || !this.currentSampler || this.status !== "ready") return notes;
-    const now = this.Tone.now();
-    this.triggerStrum(notes, direction, now, palmMute);
+    const notes = ordered.map((s) => s.note as string);
+    if (!this.Tone || !this.masterVolume || this.status !== "ready") return notes;
+
+    if (this.currentSampler) {
+      this.triggerStrum(notes, direction, this.Tone.now(), palmMute);
+    } else {
+      this.playFallback(notes);
+    }
     return notes;
   }
 
@@ -262,8 +262,10 @@ class SmartAudioEngine {
     this.stopAllSustainChords();
     this.activeSequence?.dispose();
     this.activeLoop?.dispose();
-    this.samplerCache.forEach((sampler) => sampler.dispose?.());
+    this.samplerCache.forEach((s) => s.dispose?.());
     this.samplerCache.clear();
+    this.fallbackSynth?.dispose();
+    this.fallbackSynth = null;
     this.reverb?.dispose();
     this.delay?.dispose();
     this.chorus?.dispose();
@@ -278,45 +280,47 @@ class SmartAudioEngine {
   }
 
   private async bootAudio(instrument: InstrumentId, mixer: MixerState, bpm: number) {
-    this.bootAttempts++;
     try {
-      this.setStatus("initializing", "Starting audio...");
+      this.setStatus("initializing", "Starting...");
 
-      this.samplerCache.forEach((sampler) => sampler.dispose?.());
+      this.samplerCache.forEach((s) => s.dispose?.());
       this.samplerCache.clear();
       this.samplerPromises.clear();
       this.currentSampler = null;
-      this.masterVolume = null;
 
       if (!this.Tone) this.Tone = await getTone();
-
       this.Tone.Transport.stop();
       this.Tone.Transport.cancel();
-
       await this.Tone.start();
 
-      if (this.masterVolume) {
-        this.disposeEffects();
-      }
+      if (this.masterVolume) this.disposeEffects();
       this.createEffectsChain();
 
       this.setBpm(bpm);
       this.updateMixer(mixer);
-      this.setStatus("loading", "Loading samples...");
-      await this.setInstrument(instrument);
-      this.bootAttempts = 0;
-      this.setStatus("ready", "Audio Ready");
+
+      this.currentInstrument = instrument;
+      this.setStatus("ready", "Loading sounds...");
+      this.setInstrument(instrument);
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Audio failed";
-      if (this.bootAttempts < 3) {
-        setTimeout(() => {
-          this.unlockPromise = null;
-          this.unlockFromGesture(instrument, mixer, bpm).catch(() => undefined);
-        }, 150 * this.bootAttempts);
-      }
       this.setStatus("error", msg);
       throw error;
     }
+  }
+
+  private playFallback(notes: string[]) {
+    if (!this.Tone || !this.masterVolume) return;
+    if (!this.fallbackSynth) {
+      this.fallbackSynth = new this.Tone.PolySynth(this.Tone.Synth, {
+        oscillator: { type: "triangle" },
+        envelope: { attack: 0.005, decay: 0.3, sustain: 0.2, release: 0.8 },
+        volume: -12
+      });
+      this.fallbackSynth.connect(this.instrumentVolume);
+    }
+    const now = this.Tone.now();
+    this.fallbackSynth.triggerAttackRelease(notes, "8n", now, 0.5);
   }
 
   private disposeEffects() {
@@ -396,7 +400,7 @@ class SmartAudioEngine {
 
     const promise = new Promise<any>((resolve, reject) => {
       timeoutId = window.setTimeout(() => {
-        try { sampler?.dispose?.(); } catch { /* ignore */ }
+        try { sampler?.dispose?.(); } catch { /* */ }
         reject(new Error(`Sample load timed out: ${instrument}`));
       }, timeoutMs);
       sampler = new Tone.Sampler({
@@ -410,7 +414,7 @@ class SmartAudioEngine {
         },
         onerror: (error: unknown) => {
           window.clearTimeout(timeoutId);
-          try { sampler?.dispose?.(); } catch { /* ignore */ }
+          try { sampler?.dispose?.(); } catch { /* */ }
           reject(error instanceof Error ? error : new Error(`Could not load samples: ${instrument}`));
         }
       });
@@ -434,9 +438,7 @@ class SmartAudioEngine {
     if (this.currentInstrument === "drum-kit") return ["C2", "F#2", "D2"];
     if (this.currentInstrument.includes("bass")) return [chordNameToBassNote(chordName, 2)];
     if (this.currentInstrument.includes("guitar") || this.currentInstrument === "ukulele") {
-      return chordNameToGuitarStrings(chordName)
-        .filter((string) => string.note)
-        .map((string) => string.note as string);
+      return chordNameToGuitarStrings(chordName).filter((s) => s.note).map((s) => s.note as string);
     }
     return chordNameToNotes(chordName, this.currentInstrument.includes("piano") ? 4 : 3);
   }
@@ -446,20 +448,19 @@ class SmartAudioEngine {
     const ordered = direction === "down" ? [...notes].reverse() : notes;
     const duration = palmMute ? "32n" : "2n";
     const gap = palmMute ? 0.012 : (IOS || ANDROID) ? 0.02 : 0.026;
-    ordered.forEach((note, index) => this.currentSampler.triggerAttackRelease(note, duration, startTime + index * gap, palmMute ? 0.58 : 0.84));
+    ordered.forEach((note, i) => this.currentSampler.triggerAttackRelease(note, duration, startTime + i * gap, palmMute ? 0.58 : 0.84));
   }
 
   private playFingerstyle(notes: string[], now: number, velocity: number) {
     const pattern = [0, 2, 1, 2, 0, 1];
-    pattern.forEach((noteIndex, index) => {
-      this.currentSampler.triggerAttackRelease(notes[noteIndex % notes.length], "8n", now + index * 0.09, velocity - index * 0.035);
+    pattern.forEach((noteIndex, i) => {
+      this.currentSampler.triggerAttackRelease(notes[noteIndex % notes.length], "8n", now + i * 0.09, velocity - i * 0.035);
     });
   }
 
   private playAutoPattern(notes: string[], now: number, velocity: number) {
     if (!this.Tone || !this.currentSampler) return;
     this.activeSequence?.dispose();
-
     const indexes = [0, 1, 2, 1, 0, 2, 1, 2];
     this.activeSequence = new this.Tone.Sequence(
       (time: number, index: number) => {
@@ -477,10 +478,9 @@ class SmartAudioEngine {
     if (!this.Tone || !this.currentSampler) return;
     const now = this.Tone.now();
     const pattern = mode === "autoPattern" ? ["C2", "F#2", "D2", "F#2", "C2", "F#2", "D2", "F#2"] : ["C2", "F#2", "D2"];
-
-    pattern.forEach((note, index) => {
+    pattern.forEach((note, i) => {
       const velocity = note === "C2" ? 0.9 : note === "D2" ? 0.72 : 0.48;
-      this.currentSampler.triggerAttackRelease(note, note === "F#2" ? "32n" : "8n", now + index * 0.08, velocity);
+      this.currentSampler.triggerAttackRelease(note, note === "F#2" ? "32n" : "8n", now + i * 0.08, velocity);
     });
   }
 
