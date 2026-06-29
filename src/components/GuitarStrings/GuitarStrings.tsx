@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { memo, useCallback, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import type { GuitarStringNote } from "../../types";
 
 type StrumDirection = "down" | "up";
@@ -21,11 +21,17 @@ interface GuitarStringsProps {
   onStrum: (direction: StrumDirection, palmMute: boolean) => void;
 }
 
+const FRET_POSITIONS = [0, 5.6, 10.9, 16.0, 20.7, 25.2, 29.5, 33.5, 37.5];
+const FRET_NAMES = ["Nut", "1", "2", "3", "4", "5", "6", "7", "8"];
+
 export const GuitarStrings = memo(function GuitarStrings({ strings, chordName, onStringPlay, onStrum }: GuitarStringsProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const pointers = useRef(new Map<number, PointerTrack>());
   const [activeStrings, setActiveStrings] = useState<Record<number, number>>({});
   const [pick, setPick] = useState<{ y: number; direction: StrumDirection; nonce: number } | null>(null);
+
+  const maxFret = useMemo(() => Math.max(0, ...strings.map((s) => s.fret ?? 0)), [strings]);
+  const visibleFrets = Math.max(5, Math.min(8, maxFret + 1));
 
   const stringIndexFromY = useCallback((clientY: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -126,7 +132,7 @@ export const GuitarStrings = memo(function GuitarStrings({ strings, chordName, o
   return (
     <div
       ref={containerRef}
-      className="touch-none relative h-[310px] overflow-hidden rounded-lg border border-white/10 bg-[linear-gradient(90deg,rgba(15,23,42,0.95),rgba(24,17,12,0.92))] shadow-pad"
+      className="touch-none relative h-[480px] overflow-hidden rounded-lg border border-white/10 bg-[linear-gradient(90deg,rgba(15,23,42,0.95),rgba(24,17,12,0.92))] shadow-pad"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={finishPointer}
@@ -134,30 +140,70 @@ export const GuitarStrings = memo(function GuitarStrings({ strings, chordName, o
       aria-label={`${chordName} smart guitar strings`}
       role="application"
     >
-      <div className="pointer-events-none absolute left-0 top-0 h-full w-14 border-r border-white/10 bg-black/25" />
-      <div className="pointer-events-none absolute left-14 right-0 top-0 h-full bg-[repeating-linear-gradient(90deg,rgba(255,255,255,0.05)_0,rgba(255,255,255,0.05)_1px,transparent_1px,transparent_58px)]" />
+      <div className="pointer-events-none absolute left-0 top-0 h-full w-12 border-r border-white/10 bg-black/25 z-10" />
 
       {strings.map((string, index) => {
         const active = Boolean(activeStrings[index]);
         return (
           <div key={string.stringNumber} className="absolute left-0 right-0 flex h-1/6 items-center" style={{ top: `${index * (100 / 6)}%` }}>
-            <div className="z-10 flex w-14 flex-col items-center justify-center text-[10px] font-semibold text-slate-400">
+            <div className="z-10 flex w-12 shrink-0 flex-col items-center justify-center text-[10px] font-semibold text-slate-400">
               <span>{string.stringNumber}</span>
               <span>{string.openNote}</span>
             </div>
-            <motion.div
-              className={`relative ml-3 h-[3px] flex-1 rounded-full ${string.muted ? "bg-slate-500/35" : "bg-slate-100/80"}`}
-              animate={{
-                x: active ? [0, -7, 6, -4, 0] : 0,
-                scaleY: active ? [1, 1.8, 1] : 1,
-                boxShadow: active ? "0 0 22px rgba(94,234,212,0.75)" : "0 0 0 rgba(0,0,0,0)"
-              }}
-              transition={{ duration: 0.24 }}
-            >
-              {active ? <span className="absolute -top-5 left-1/2 size-10 -translate-x-1/2 animate-[ping_420ms_ease-out] rounded-full bg-cyan-200/25" /> : null}
-            </motion.div>
-            <div className="w-20 px-3 text-right text-xs font-semibold text-slate-200">
-              {string.muted ? "X" : `${string.note} · ${string.fret}`}
+
+            <div className="relative ml-0 flex-1 h-full flex items-center">
+              {FRET_POSITIONS.slice(0, visibleFrets).map((fretPos, fi) => {
+                const isNut = fi === 0;
+                const isThisFret = string.fret === fi;
+                const isOpen = fi === 0 && string.fret === 0 && !string.muted;
+
+                return (
+                  <div
+                    key={fi}
+                    className={`absolute h-full flex items-center ${fi > 0 ? "border-l border-white/5" : ""}`}
+                    style={{ left: `${(fretPos / FRET_POSITIONS[visibleFrets - 1]) * 100}%`, width: `${fretPos > 0 ? ((FRET_POSITIONS[fi] - FRET_POSITIONS[fi - 1]) / FRET_POSITIONS[visibleFrets - 1]) * 100 : 10}%` }}
+                  >
+                    {fi > 0 && (
+                      <span className="absolute -top-1 left-0 -translate-x-1/2 text-[8px] text-slate-600">{FRET_NAMES[fi]}</span>
+                    )}
+
+                    {isNut && !string.muted && (
+                      <span className="absolute left-1 text-[10px] font-bold text-emerald-400">○</span>
+                    )}
+                    {isNut && string.muted && (
+                      <span className="absolute left-1 text-[10px] font-bold text-red-400">✕</span>
+                    )}
+
+                    {isThisFret && fi > 0 && (
+                      <div className="absolute left-[10%] z-20 flex items-center justify-center">
+                        <div className={`size-7 rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-100 ${
+                          active
+                            ? "border-cyan-200 bg-cyan-400/40 shadow-cyan-400/50"
+                            : "border-amber-300/70 bg-amber-400/30 shadow-amber-400/30"
+                        }`}>
+                          <span className={`text-[10px] font-bold ${active ? "text-white" : "text-amber-100"}`}>{fi}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <motion.div
+                className={`relative ml-1 h-[3px] flex-1 rounded-full ${string.muted ? "bg-slate-500/30" : "bg-slate-100/70"}`}
+                animate={{
+                  x: active ? [0, -7, 6, -4, 0] : 0,
+                  scaleY: active ? [1, 2.2, 1] : 1,
+                  boxShadow: active ? "0 0 24px rgba(94,234,212,0.8)" : "0 0 0 rgba(0,0,0,0)"
+                }}
+                transition={{ duration: 0.24 }}
+              >
+                {active ? <span className="absolute -top-6 left-1/2 size-12 -translate-x-1/2 animate-[ping_420ms_ease-out] rounded-full bg-cyan-200/25" /> : null}
+              </motion.div>
+
+              <div className="w-16 shrink-0 px-2 text-right text-[11px] font-semibold text-slate-200">
+                {string.muted ? "X" : `${string.note} · ${string.fret}`}
+              </div>
             </div>
           </div>
         );
@@ -166,7 +212,7 @@ export const GuitarStrings = memo(function GuitarStrings({ strings, chordName, o
       {pick ? (
         <motion.div
           key={pick.nonce}
-          className="pointer-events-none absolute left-[4.2rem] z-20 h-8 w-12 rounded-full border border-cyan-200/50 bg-cyan-200/15"
+          className="pointer-events-none absolute left-[3rem] z-30 h-8 w-12 rounded-full border border-cyan-200/50 bg-cyan-200/15"
           style={{ top: pick.y - 16 }}
           initial={{ opacity: 0, x: pick.direction === "down" ? -18 : 18, rotate: pick.direction === "down" ? -18 : 18 }}
           animate={{ opacity: [0, 1, 0], x: pick.direction === "down" ? 42 : -42 }}

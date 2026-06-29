@@ -53,40 +53,38 @@ export default function StudioPage() {
     <main className="min-h-screen pb-16 text-slate-100">
       <TransportBar />
 
-      <div className="mx-auto grid max-w-7xl gap-4 px-3 py-4 sm:px-4 lg:grid-cols-[1fr_360px]">
-        <div className="min-w-0 space-y-4">
-          <ProjectActions />
-          <InstrumentView />
-          <AudioUnlock />
+      <div className="mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-4">
+        <ProjectActions />
+        <InstrumentView />
+        <AudioUnlock />
 
-          <section className="rounded-lg border border-white/10 bg-white/[0.05] p-3 shadow-pad">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-              {PLAY_MODES.map((mode) => (
-                <button
-                  key={mode.value}
-                  className={`h-10 rounded-lg border px-3 text-xs font-semibold transition ${
-                    playMode === mode.value
-                      ? "border-cyan-200/70 bg-cyan-300/20 text-cyan-100"
-                      : "border-white/10 bg-black/20 text-slate-300 hover:bg-white/10"
-                  }`}
-                  onClick={() => setPlayMode(mode.value)}
-                >
-                  {mode.label}
-                </button>
-              ))}
-            </div>
-          </section>
+        <section className="rounded-lg border border-white/10 bg-white/[0.05] p-3 shadow-pad">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+            {PLAY_MODES.map((mode) => (
+              <button
+                key={mode.value}
+                className={`h-10 rounded-lg border px-3 text-xs font-semibold transition ${
+                  playMode === mode.value
+                    ? "border-cyan-200/70 bg-cyan-300/20 text-cyan-100"
+                    : "border-white/10 bg-black/20 text-slate-300 hover:bg-white/10"
+                }`}
+                onClick={() => setPlayMode(mode.value)}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+        </section>
 
-          {isGuitar && <SmartGuitar />}
-          {isPiano && <SmartPiano />}
-          <ChordPadGrid />
-        </div>
+        {isGuitar && <SmartGuitar />}
+        {isPiano && <SmartPiano />}
+        <ChordPadGrid />
 
-        <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <MixerPanel />
           <EffectsPanel />
           <RecorderControls />
-        </aside>
+        </div>
       </div>
 
       <AdBanner />
