@@ -27,7 +27,6 @@ export const SmartPiano = memo(function SmartPiano() {
   const addPerformanceEvent = useStudioStore((state) => state.addPerformanceEvent);
   const chords = useStudioStore((state) => state.chords);
   const currentChord = useStudioStore((state) => state.currentChord);
-  const setCurrentChord = useStudioStore((state) => state.setCurrentChord);
 
   const [activeNotes, setActiveNotes] = useState<Record<string, number>>({});
   const pointers = useRef<Map<number, PointerNote>>(new Map());

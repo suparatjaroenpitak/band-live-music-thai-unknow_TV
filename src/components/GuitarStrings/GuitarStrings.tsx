@@ -166,7 +166,7 @@ export const GuitarStrings = memo(function GuitarStrings({ strings, chordName, o
           return (
             <div key={string.stringNumber} className="flex-1 flex items-stretch border-b border-white/[0.04] relative">
               <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${numFrets}, 1fr)` }}>
-                {fretSections.map((f, fi) => {
+                {fretSections.map((_, fi) => {
                   const isNut = fi === 0;
                   const isOpen = isNut && string.fret === 0 && !string.muted;
                   const isMuted = isNut && string.muted;
@@ -210,7 +210,7 @@ export const GuitarStrings = memo(function GuitarStrings({ strings, chordName, o
       </div>
 
       <div className="pointer-events-none absolute right-0 top-0 h-full w-24 bg-black/20 flex flex-col z-10">
-        {strings.map((string, index) => (
+        {strings.map((string) => (
           <div key={string.stringNumber} className="flex-1 flex items-center justify-end pr-3">
             <span className="text-[11px] font-semibold text-slate-300">
               {string.muted ? "X" : `${string.note}  ${string.fret}`}
@@ -220,7 +220,7 @@ export const GuitarStrings = memo(function GuitarStrings({ strings, chordName, o
       </div>
 
       <div className="pointer-events-none absolute left-0 top-0 h-full w-14 flex flex-col z-10">
-        {strings.map((string, index) => (
+        {strings.map((string) => (
           <div key={string.stringNumber} className="flex-1 flex flex-col items-center justify-center text-[10px] font-semibold text-slate-400">
             <span>{string.stringNumber}</span>
             <span>{string.openNote}</span>
