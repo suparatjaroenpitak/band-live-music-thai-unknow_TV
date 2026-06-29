@@ -14,6 +14,13 @@ interface SustainVoice {
 const IOS = typeof navigator !== "undefined" && /iP(hone|ad|od)/.test(navigator.userAgent);
 const ANDROID = typeof navigator !== "undefined" && /Android/.test(navigator.userAgent);
 
+let tonePromise: Promise<ToneModule> | null = null;
+
+function getTone(): Promise<ToneModule> {
+  if (!tonePromise) tonePromise = import("tone");
+  return tonePromise;
+}
+
 class SmartAudioEngine {
   private Tone: ToneModule | null = null;
   private recorder: any = null;
@@ -41,6 +48,12 @@ class SmartAudioEngine {
   private statusMessage = "Tap to start audio";
   private bootAttempts = 0;
 
+  constructor() {
+    getTone().then((T) => {
+      this.Tone = T;
+    }).catch(() => undefined);
+  }
+
   getStatus() {
     return { status: this.status, message: this.statusMessage };
   }
@@ -54,10 +67,10 @@ class SmartAudioEngine {
   }
 
   async ensureReady(instrument: InstrumentId, mixer: MixerState, bpm: number) {
-    if (this.status === "ready") {
+    if (this.status === "ready" && this.currentSampler) {
       this.setBpm(bpm);
       this.updateMixer(mixer);
-      if (this.currentSampler) return;
+      return;
     }
     await this.unlockFromGesture(instrument, mixer, bpm);
   }
@@ -267,7 +280,7 @@ class SmartAudioEngine {
   private async bootAudio(instrument: InstrumentId, mixer: MixerState, bpm: number) {
     this.bootAttempts++;
     try {
-      this.setStatus("initializing", "Starting AudioContext");
+      this.setStatus("initializing", "Starting audio...");
 
       this.samplerCache.forEach((sampler) => sampler.dispose?.());
       this.samplerCache.clear();
@@ -275,68 +288,60 @@ class SmartAudioEngine {
       this.currentSampler = null;
       this.masterVolume = null;
 
-      if (this.Tone) {
-        try {
-          this.Tone.Transport?.stop?.();
-          this.Tone.Transport?.cancel?.();
-        } catch {
-          // ignore
-        }
-        this.Tone = null;
-      }
+      if (!this.Tone) this.Tone = await getTone();
 
-      this.Tone = await import("tone");
+      this.Tone.Transport.stop();
+      this.Tone.Transport.cancel();
 
       await this.Tone.start();
-      await this.resumeRawContext();
 
+      if (this.masterVolume) {
+        this.disposeEffects();
+      }
       this.createEffectsChain();
 
       this.setBpm(bpm);
       this.updateMixer(mixer);
+      this.setStatus("loading", "Loading samples...");
       await this.setInstrument(instrument);
       this.bootAttempts = 0;
       this.setStatus("ready", "Audio Ready");
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Audio failed to start";
-      if (this.bootAttempts < 5) {
+      const msg = error instanceof Error ? error.message : "Audio failed";
+      if (this.bootAttempts < 3) {
         setTimeout(() => {
           this.unlockPromise = null;
           this.unlockFromGesture(instrument, mixer, bpm).catch(() => undefined);
-        }, 200 * this.bootAttempts);
+        }, 150 * this.bootAttempts);
       }
       this.setStatus("error", msg);
       throw error;
     }
   }
 
-  private async resumeRawContext() {
-    if (!this.Tone) return;
-    const toneWithContext = this.Tone as ToneModule & {
-      getContext?: () => { rawContext?: AudioContext; resume?: () => Promise<void> };
-      context?: { rawContext?: AudioContext; state?: string; resume?: () => Promise<void> };
-    };
-    const toneContext = toneWithContext.getContext?.() ?? toneWithContext.context;
-    const rawContext = toneContext?.rawContext ?? (toneContext as unknown as AudioContext | undefined);
-
-    if (toneContext?.resume) await toneContext.resume();
-    if (rawContext?.state === "suspended") {
-      try {
-        await rawContext.resume();
-      } catch {
-        if (IOS) {
-          await new Promise<void>((resolve) => {
-            const unlock = () => {
-              rawContext.resume().then(() => resolve()).catch(() => resolve());
-              document.removeEventListener("touchend", unlock, true);
-              document.removeEventListener("click", unlock, true);
-            };
-            document.addEventListener("touchend", unlock, { capture: true, once: true });
-            document.addEventListener("click", unlock, { capture: true, once: true });
-          });
-        }
-      }
-    }
+  private disposeEffects() {
+    this.reverb?.dispose();
+    this.delay?.dispose();
+    this.chorus?.dispose();
+    this.eq?.dispose();
+    this.compressor?.dispose();
+    this.limiter?.dispose();
+    this.masterVolume?.dispose();
+    this.instrumentVolume?.dispose();
+    this.pan?.dispose();
+    this.dryGain?.dispose();
+    this.wetGain?.dispose();
+    this.reverb = null;
+    this.delay = null;
+    this.chorus = null;
+    this.eq = null;
+    this.compressor = null;
+    this.limiter = null;
+    this.masterVolume = null;
+    this.instrumentVolume = null;
+    this.pan = null;
+    this.dryGain = null;
+    this.wetGain = null;
   }
 
   private createEffectsChain() {
