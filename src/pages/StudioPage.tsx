@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { AdBanner } from "../components/AdBanner/AdBanner";
 import { AudioUnlock } from "../components/AudioUnlock/AudioUnlock";
 import { ChordPadGrid } from "../components/ChordPads/ChordPadGrid";
@@ -8,6 +8,7 @@ import { MixerPanel } from "../components/MixerPanel/MixerPanel";
 import { ProjectActions } from "../components/Project/ProjectActions";
 import { RecorderControls } from "../components/Recorder/RecorderControls";
 import { SmartGuitar } from "../components/SmartGuitar/SmartGuitar";
+import { SmartPiano } from "../components/SmartPiano/SmartPiano";
 import { TransportBar } from "../components/Transport/TransportBar";
 import { audioEngine } from "../audio/ToneEngine";
 import { useAutoSave } from "../hooks/useAutoSave";
@@ -30,6 +31,9 @@ export default function StudioPage() {
   const mixer = useStudioStore((state) => state.mixer);
   const bpm = useStudioStore((state) => state.bpm);
   const currentInstrument = useStudioStore((state) => state.currentInstrument);
+
+  const isPiano = useMemo(() => currentInstrument.includes("piano"), [currentInstrument]);
+  const isGuitar = useMemo(() => currentInstrument.includes("guitar") || currentInstrument === "ukulele" || currentInstrument.includes("bass"), [currentInstrument]);
 
   useEffect(() => {
     audioEngine.updateMixer(mixer);
@@ -73,7 +77,8 @@ export default function StudioPage() {
             </div>
           </section>
 
-          <SmartGuitar />
+          {isGuitar && <SmartGuitar />}
+          {isPiano && <SmartPiano />}
           <ChordPadGrid />
         </div>
 
