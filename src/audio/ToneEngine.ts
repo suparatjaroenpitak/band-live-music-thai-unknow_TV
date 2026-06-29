@@ -124,20 +124,20 @@ class SmartAudioEngine {
   updateMixer(mixer: MixerState) {
     if (!this.Tone || !this.masterVolume) return;
 
-    this.masterVolume.volume.rampTo(this.gainToDb(mixer.masterVolume), 0.04);
-    this.instrumentVolume.volume.rampTo(this.gainToDb(mixer.instrumentVolume), 0.04);
+    this.masterVolume.volume.rampTo(this.gainToDb(mixer.masterVolume * 0.8), 0.04);
+    this.instrumentVolume.volume.rampTo(this.gainToDb(mixer.instrumentVolume * 0.85), 0.04);
     this.instrumentVolume.mute = mixer.muted && !mixer.solo;
     this.pan.pan.rampTo(mixer.pan, 0.035);
-    this.dryGain.gain.rampTo(mixer.reverbDry, 0.05);
-    this.wetGain.gain.rampTo(mixer.reverbWet, 0.05);
-    this.reverb.decay = 0.35 + mixer.reverbRoomSize * 7.5;
+    this.dryGain.gain.rampTo(mixer.reverbDry * 0.85, 0.05);
+    this.wetGain.gain.rampTo(mixer.reverbWet * 0.7, 0.05);
+    this.reverb.decay = 0.35 + mixer.reverbRoomSize * 5;
     this.reverb.wet.rampTo(1, 0.05);
     this.delay.delayTime.rampTo(mixer.delayTime, 0.04);
-    this.delay.feedback.rampTo(mixer.delayFeedback, 0.04);
-    this.delay.wet.rampTo(mixer.delayMix, 0.04);
-    this.chorus.depth = mixer.chorusDepth;
+    this.delay.feedback.rampTo(mixer.delayFeedback * 0.8, 0.04);
+    this.delay.wet.rampTo(mixer.delayMix * 0.8, 0.04);
+    this.chorus.depth = mixer.chorusDepth * 0.7;
     this.chorus.frequency.rampTo(mixer.chorusRate, 0.04);
-    this.chorus.wet.rampTo(mixer.chorusMix, 0.04);
+    this.chorus.wet.rampTo(mixer.chorusMix * 0.7, 0.04);
     this.eq.low.rampTo(mixer.eqLow, 0.06);
     this.eq.mid.rampTo(mixer.eqMid, 0.06);
     this.eq.high.rampTo(mixer.eqHigh, 0.06);
@@ -145,7 +145,7 @@ class SmartAudioEngine {
     this.compressor.ratio.rampTo(mixer.compressorRatio, 0.05);
     this.compressor.attack.rampTo(mixer.compressorAttack, 0.05);
     this.compressor.release.rampTo(mixer.compressorRelease, 0.05);
-    this.limiter.threshold.rampTo(-0.5 - (1 - mixer.limiter) * 12, 0.05);
+    this.limiter.threshold.rampTo(-3 - (1 - mixer.limiter) * 10, 0.05);
   }
 
   playChord(chordName: string, mode: PlayMode) {
@@ -158,8 +158,9 @@ class SmartAudioEngine {
     }
 
     if (this.currentSampler) {
+      this.currentSampler.releaseAll?.(0.01);
       const now = this.Tone.now();
-      const velocity = 0.82;
+      const velocity = 0.65;
       switch (mode) {
         case "arpeggio":
           notes.forEach((note, i) => this.currentSampler.triggerAttackRelease(note, "8n", now + i * 0.075, velocity));
@@ -178,7 +179,7 @@ class SmartAudioEngine {
           break;
         case "chord":
         default:
-          this.currentSampler.triggerAttackRelease(notes, "2n", now, velocity);
+          this.currentSampler.triggerAttackRelease(notes, "4n", now, velocity);
           break;
       }
     } else {
@@ -198,7 +199,8 @@ class SmartAudioEngine {
 
     this.stopSustainChord(sustainId);
     if (this.currentSampler) {
-      this.currentSampler.triggerAttack(notes, this.Tone.now(), 0.82);
+      this.currentSampler.releaseAll?.(0.01);
+      this.currentSampler.triggerAttack(notes, this.Tone.now(), 0.55);
       this.sustainVoices.set(sustainId, { notes, sampler: this.currentSampler });
     } else {
       this.playFallback(notes);
@@ -223,7 +225,7 @@ class SmartAudioEngine {
     if (!string?.note || !this.Tone || !this.masterVolume || this.status !== "ready") return string?.note ?? null;
 
     if (this.currentSampler) {
-      this.currentSampler.triggerAttackRelease(string.note, palmMute ? "32n" : "8n", this.Tone.now(), palmMute ? 0.58 : 0.84);
+      this.currentSampler.triggerAttackRelease(string.note, palmMute ? "32n" : "8n", this.Tone.now(), palmMute ? 0.45 : 0.65);
     } else {
       this.playFallback([string.note]);
     }
@@ -315,12 +317,13 @@ class SmartAudioEngine {
       this.fallbackSynth = new this.Tone.PolySynth(this.Tone.Synth, {
         oscillator: { type: "triangle" },
         envelope: { attack: 0.005, decay: 0.3, sustain: 0.2, release: 0.8 },
-        volume: -12
+        volume: -18
       });
       this.fallbackSynth.connect(this.instrumentVolume);
     }
+    this.fallbackSynth.releaseAll?.(0.01);
     const now = this.Tone.now();
-    this.fallbackSynth.triggerAttackRelease(notes, "8n", now, 0.5);
+    this.fallbackSynth.triggerAttackRelease(notes, "8n", now, 0.4);
   }
 
   private disposeEffects() {
@@ -352,25 +355,25 @@ class SmartAudioEngine {
     if (!this.Tone) return;
     const Tone = this.Tone;
 
-    this.instrumentVolume = new Tone.Volume(-2);
+    this.instrumentVolume = new Tone.Volume(-6);
     this.pan = new Tone.Panner(0);
-    this.dryGain = new Tone.Gain(0.88);
-    this.wetGain = new Tone.Gain(0.24);
+    this.dryGain = new Tone.Gain(0.75);
+    this.wetGain = new Tone.Gain(0.2);
 
     if (IOS || ANDROID) {
-      this.chorus = new Tone.Chorus({ frequency: 2.4, delayTime: 3.5, depth: 0.32, wet: 0.05 }).start();
-      this.delay = new Tone.FeedbackDelay({ delayTime: 0.24, feedback: 0.18, wet: 0.08 });
-      this.reverb = new Tone.Reverb({ decay: 2.5, preDelay: 0.01, wet: 1 });
+      this.chorus = new Tone.Chorus({ frequency: 2.4, delayTime: 3.5, depth: 0.25, wet: 0.04 }).start();
+      this.delay = new Tone.FeedbackDelay({ delayTime: 0.24, feedback: 0.15, wet: 0.06 });
+      this.reverb = new Tone.Reverb({ decay: 2.0, preDelay: 0.01, wet: 0.8 });
     } else {
-      this.chorus = new Tone.Chorus({ frequency: 2.4, delayTime: 3.5, depth: 0.32, wet: 0.1 }).start();
-      this.delay = new Tone.FeedbackDelay({ delayTime: 0.24, feedback: 0.22, wet: 0.12 });
-      this.reverb = new Tone.Reverb({ decay: 3.5, preDelay: 0.015, wet: 1 });
+      this.chorus = new Tone.Chorus({ frequency: 2.4, delayTime: 3.5, depth: 0.3, wet: 0.08 }).start();
+      this.delay = new Tone.FeedbackDelay({ delayTime: 0.24, feedback: 0.18, wet: 0.1 });
+      this.reverb = new Tone.Reverb({ decay: 2.5, preDelay: 0.012, wet: 0.9 });
     }
 
     this.eq = new Tone.EQ3(0, 0, 0);
-    this.compressor = new Tone.Compressor({ threshold: -20, ratio: 3, attack: 0.003, release: 0.25 });
-    this.limiter = new Tone.Limiter(-1);
-    this.masterVolume = new Tone.Volume(-1);
+    this.compressor = new Tone.Compressor({ threshold: -24, ratio: 4, attack: 0.002, release: 0.15 });
+    this.limiter = new Tone.Limiter(-3);
+    this.masterVolume = new Tone.Volume(-3);
 
     this.instrumentVolume.connect(this.pan);
     this.pan.connect(this.dryGain);
@@ -446,15 +449,15 @@ class SmartAudioEngine {
   private triggerStrum(notes: string[], direction: StrumDirection, startTime: number, palmMute: boolean) {
     if (!this.currentSampler) return;
     const ordered = direction === "down" ? [...notes].reverse() : notes;
-    const duration = palmMute ? "32n" : "2n";
+    const duration = palmMute ? "32n" : "4n";
     const gap = palmMute ? 0.012 : (IOS || ANDROID) ? 0.02 : 0.026;
-    ordered.forEach((note, i) => this.currentSampler.triggerAttackRelease(note, duration, startTime + i * gap, palmMute ? 0.58 : 0.84));
+    ordered.forEach((note, i) => this.currentSampler.triggerAttackRelease(note, duration, startTime + i * gap, palmMute ? 0.45 : 0.65));
   }
 
   private playFingerstyle(notes: string[], now: number, velocity: number) {
     const pattern = [0, 2, 1, 2, 0, 1];
     pattern.forEach((noteIndex, i) => {
-      this.currentSampler.triggerAttackRelease(notes[noteIndex % notes.length], "8n", now + i * 0.09, velocity - i * 0.035);
+      this.currentSampler.triggerAttackRelease(notes[noteIndex % notes.length], "8n", now + i * 0.09, Math.min(velocity, velocity - i * 0.035));
     });
   }
 
