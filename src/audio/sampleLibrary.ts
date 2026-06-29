@@ -10,79 +10,80 @@ export interface SampleInstrumentConfig {
 
 const GM_BASE = "https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM";
 const DRUM_BASE = "https://tonejs.github.io/audio/drum-samples/CR78";
+const CACHE_BUST = "?v=2";
 
 const guitarRoots = {
-  E2: "E2.mp3",
-  A2: "A2.mp3",
-  D3: "D3.mp3",
-  G3: "G3.mp3",
-  B3: "B3.mp3",
-  E4: "E4.mp3"
+  E2: `E2.mp3${CACHE_BUST}`,
+  A2: `A2.mp3${CACHE_BUST}`,
+  D3: `D3.mp3${CACHE_BUST}`,
+  G3: `G3.mp3${CACHE_BUST}`,
+  B3: `B3.mp3${CACHE_BUST}`,
+  E4: `E4.mp3${CACHE_BUST}`
 };
 
 const ukuleleRoots = {
-  G3: "G3.mp3",
-  C4: "C4.mp3",
-  E4: "E4.mp3",
-  A4: "A4.mp3"
+  G3: `G3.mp3${CACHE_BUST}`,
+  C4: `C4.mp3${CACHE_BUST}`,
+  E4: `E4.mp3${CACHE_BUST}`,
+  A4: `A4.mp3${CACHE_BUST}`
 };
 
 const bassRoots = {
-  E1: "E1.mp3",
-  A1: "A1.mp3",
-  D2: "D2.mp3",
-  G2: "G2.mp3",
-  C3: "C3.mp3"
+  E1: `E1.mp3${CACHE_BUST}`,
+  A1: `A1.mp3${CACHE_BUST}`,
+  D2: `D2.mp3${CACHE_BUST}`,
+  G2: `G2.mp3${CACHE_BUST}`,
+  C3: `C3.mp3${CACHE_BUST}`
 };
 
 const pianoRoots = {
-  A1: "A1.mp3",
-  C2: "C2.mp3",
-  E2: "E2.mp3",
-  G2: "G2.mp3",
-  C3: "C3.mp3",
-  E3: "E3.mp3",
-  G3: "G3.mp3",
-  C4: "C4.mp3",
-  E4: "E4.mp3",
-  G4: "G4.mp3",
-  C5: "C5.mp3",
-  E5: "E5.mp3",
-  G5: "G5.mp3",
-  C6: "C6.mp3"
+  A1: `A1.mp3${CACHE_BUST}`,
+  C2: `C2.mp3${CACHE_BUST}`,
+  E2: `E2.mp3${CACHE_BUST}`,
+  G2: `G2.mp3${CACHE_BUST}`,
+  C3: `C3.mp3${CACHE_BUST}`,
+  E3: `E3.mp3${CACHE_BUST}`,
+  G3: `G3.mp3${CACHE_BUST}`,
+  C4: `C4.mp3${CACHE_BUST}`,
+  E4: `E4.mp3${CACHE_BUST}`,
+  G4: `G4.mp3${CACHE_BUST}`,
+  C5: `C5.mp3${CACHE_BUST}`,
+  E5: `E5.mp3${CACHE_BUST}`,
+  G5: `G5.mp3${CACHE_BUST}`,
+  C6: `C6.mp3${CACHE_BUST}`
 };
 
 const bowedRoots = {
-  G2: "G2.mp3",
-  C3: "C3.mp3",
-  G3: "G3.mp3",
-  C4: "C4.mp3",
-  G4: "G4.mp3",
-  C5: "C5.mp3"
+  G2: `G2.mp3${CACHE_BUST}`,
+  C3: `C3.mp3${CACHE_BUST}`,
+  G3: `G3.mp3${CACHE_BUST}`,
+  C4: `C4.mp3${CACHE_BUST}`,
+  G4: `G4.mp3${CACHE_BUST}`,
+  C5: `C5.mp3${CACHE_BUST}`
 };
 
 const choirRoots = {
-  C3: "C3.mp3",
-  G3: "G3.mp3",
-  C4: "C4.mp3",
-  G4: "G4.mp3",
-  C5: "C5.mp3"
+  C3: `C3.mp3${CACHE_BUST}`,
+  G3: `G3.mp3${CACHE_BUST}`,
+  C4: `C4.mp3${CACHE_BUST}`,
+  G4: `G4.mp3${CACHE_BUST}`,
+  C5: `C5.mp3${CACHE_BUST}`
 };
 
 const synthRoots = {
-  C2: "C2.mp3",
-  G2: "G2.mp3",
-  C3: "C3.mp3",
-  G3: "G3.mp3",
-  C4: "C4.mp3",
-  G4: "G4.mp3",
-  C5: "C5.mp3"
+  C2: `C2.mp3${CACHE_BUST}`,
+  G2: `G2.mp3${CACHE_BUST}`,
+  C3: `C3.mp3${CACHE_BUST}`,
+  G3: `G3.mp3${CACHE_BUST}`,
+  C4: `C4.mp3${CACHE_BUST}`,
+  G4: `G4.mp3${CACHE_BUST}`,
+  C5: `C5.mp3${CACHE_BUST}`
 };
 
 const drumRoots = {
-  C2: "kick.mp3",
-  D2: "snare.mp3",
-  "F#2": "hihat.mp3"
+  C2: `kick.mp3${CACHE_BUST}`,
+  D2: `snare.mp3${CACHE_BUST}`,
+  "F#2": `hihat.mp3${CACHE_BUST}`
 };
 
 function gm(instrument: string) {

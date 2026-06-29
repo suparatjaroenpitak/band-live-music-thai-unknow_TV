@@ -268,12 +268,29 @@ class SmartAudioEngine {
     this.bootAttempts++;
     try {
       this.setStatus("initializing", "Starting AudioContext");
-      if (!this.Tone) this.Tone = await import("tone");
+
+      this.samplerCache.forEach((sampler) => sampler.dispose?.());
+      this.samplerCache.clear();
+      this.samplerPromises.clear();
+      this.currentSampler = null;
+      this.masterVolume = null;
+
+      if (this.Tone) {
+        try {
+          this.Tone.Transport?.stop?.();
+          this.Tone.Transport?.cancel?.();
+        } catch {
+          // ignore
+        }
+        this.Tone = null;
+      }
+
+      this.Tone = await import("tone");
 
       await this.Tone.start();
       await this.resumeRawContext();
 
-      if (!this.masterVolume) this.createEffectsChain();
+      this.createEffectsChain();
 
       this.setBpm(bpm);
       this.updateMixer(mixer);
@@ -282,11 +299,11 @@ class SmartAudioEngine {
       this.setStatus("ready", "Audio Ready");
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Audio failed to start";
-      if (this.bootAttempts < 3 && (IOS || ANDROID)) {
+      if (this.bootAttempts < 5) {
         setTimeout(() => {
           this.unlockPromise = null;
           this.unlockFromGesture(instrument, mixer, bpm).catch(() => undefined);
-        }, 300 * this.bootAttempts);
+        }, 200 * this.bootAttempts);
       }
       this.setStatus("error", msg);
       throw error;
@@ -373,7 +390,10 @@ class SmartAudioEngine {
     let sampler: any;
 
     const promise = new Promise<any>((resolve, reject) => {
-      timeoutId = window.setTimeout(() => reject(new Error(`Sample load timed out: ${instrument}`)), timeoutMs);
+      timeoutId = window.setTimeout(() => {
+        try { sampler?.dispose?.(); } catch { /* ignore */ }
+        reject(new Error(`Sample load timed out: ${instrument}`));
+      }, timeoutMs);
       sampler = new Tone.Sampler({
         urls: config.urls,
         baseUrl: config.baseUrl,
@@ -385,6 +405,7 @@ class SmartAudioEngine {
         },
         onerror: (error: unknown) => {
           window.clearTimeout(timeoutId);
+          try { sampler?.dispose?.(); } catch { /* ignore */ }
           reject(error instanceof Error ? error : new Error(`Could not load samples: ${instrument}`));
         }
       });
@@ -396,6 +417,9 @@ class SmartAudioEngine {
       const loaded = await promise;
       this.samplerCache.set(instrument, loaded);
       return loaded;
+    } catch (error) {
+      this.samplerPromises.delete(instrument);
+      throw error;
     } finally {
       this.samplerPromises.delete(instrument);
     }
