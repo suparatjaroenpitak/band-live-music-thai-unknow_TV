@@ -1,5 +1,6 @@
 import { Music } from "lucide-react";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { chordNameToNotes } from "../../audio/chords";
 import { audioEngine } from "../../audio/ToneEngine";
 import { useStudioStore } from "../../store/useStudioStore";
 
@@ -32,6 +33,7 @@ export const SmartPiano = memo(function SmartPiano() {
   const pointers = useRef<Map<number, PointerNote>>(new Map());
 
   const selectedChord = useMemo(() => chords.find((c) => c.id === currentChord) ?? chords[0], [chords, currentChord]);
+  const chordNoteNames = useMemo(() => chordNameToNotes(selectedChord.name, 0).map((n) => n.replace(/\d+/g, "")), [selectedChord.name]);
 
   const ensureAudio = useCallback(() => {
     void audioEngine.ensureReady(currentInstrument, mixer, bpm);
@@ -134,7 +136,8 @@ export const SmartPiano = memo(function SmartPiano() {
             <h2 className="text-lg font-semibold text-white">Smart Piano</h2>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-            <span>{octaveStart} - {octaveEnd} Octave</span>
+            <span className="rounded-md border border-amber-200/30 bg-amber-300/10 px-2 py-1 text-amber-200">{selectedChord.name}</span>
+            <span>{chordNoteNames.join(" / ")}</span>
             <span>|</span>
             <span>{Object.keys(activeNotes).length > 0 ? `Playing: ${Object.keys(activeNotes).join(", ")}` : "Tap keys to play"}</span>
           </div>
@@ -145,30 +148,14 @@ export const SmartPiano = memo(function SmartPiano() {
           className="h-9 shrink-0 rounded-lg border border-blue-200/50 bg-blue-300/20 px-3 text-sm font-bold text-blue-100 transition hover:bg-blue-300/30"
           type="button"
         >
-          Play {selectedChord.name} Chord
+          Play Chord
         </button>
-
-        <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
-          {chords.slice(0, 12).map((chord) => (
-            <button
-              key={chord.id}
-              className={`h-9 shrink-0 rounded-lg border px-3 text-sm font-bold transition ${
-                selectedChord.id === chord.id
-                  ? "border-blue-200/70 bg-blue-300/20 text-blue-100"
-                  : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-              }`}
-              onClick={() => setCurrentChord(chord.id)}
-              type="button"
-            >
-              {chord.name}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="relative touch-none select-none overflow-hidden rounded-xl border border-white/10 bg-[#0c1018] shadow-pad" style={{ height: "340px" }}>
         {whiteKeys.map(({ note, midi }) => {
           const active = Boolean(activeNotes[note]);
+          const inChord = chordNoteNames.includes(note.replace(/\d+/g, ""));
           return (
             <div
               key={midi}
@@ -178,7 +165,9 @@ export const SmartPiano = memo(function SmartPiano() {
               className={`absolute bottom-0 top-0 rounded-b-md border border-b-0 transition-all duration-75 ${
                 active
                   ? "border-blue-300/50 bg-gradient-to-b from-blue-200/40 to-blue-300/20 shadow-[0_0_20px_rgba(147,197,253,0.4)]"
-                  : "border-white/15 bg-gradient-to-b from-slate-50 to-white hover:from-slate-100 hover:to-white/95"
+                  : inChord
+                    ? "border-amber-200/40 bg-gradient-to-b from-amber-50 to-amber-100/80"
+                    : "border-white/15 bg-gradient-to-b from-slate-50 to-white hover:from-slate-100 hover:to-white/95"
               }`}
               style={{
                 left: `${(midi - (octaveStart + 1) * 12) / (12 * (octaveEnd - octaveStart + 1)) * 100}%`,
@@ -186,15 +175,19 @@ export const SmartPiano = memo(function SmartPiano() {
                 zIndex: 1,
               }}
             >
-              <span className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-xs font-semibold ${active ? "text-blue-700" : "text-slate-400"}`}>
+              <span className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-xs font-semibold ${active ? "text-blue-700" : inChord ? "text-amber-600" : "text-slate-400"}`}>
                 {note}
               </span>
+              {inChord && !active && (
+                <span className="pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 size-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
+              )}
             </div>
           );
         })}
 
         {blackKeys.map(({ note, midi, leftPct }) => {
           const active = Boolean(activeNotes[note]);
+          const inChord = chordNoteNames.includes(note.replace(/\d+/g, ""));
           return (
             <div
               key={midi}
@@ -204,7 +197,9 @@ export const SmartPiano = memo(function SmartPiano() {
               className={`absolute bottom-0 top-0 rounded-b-md border border-b-0 transition-all duration-75 ${
                 active
                   ? "border-blue-400/60 bg-gradient-to-b from-blue-400/70 to-blue-600/50 shadow-[0_0_24px_rgba(96,165,250,0.5)]"
-                  : "border-black/40 bg-gradient-to-b from-slate-800 to-black hover:from-slate-700 hover:to-slate-900"
+                  : inChord
+                    ? "border-amber-400/50 bg-gradient-to-b from-amber-600/60 to-amber-800/50"
+                    : "border-black/40 bg-gradient-to-b from-slate-800 to-black hover:from-slate-700 hover:to-slate-900"
               }`}
               style={{
                 left: `${leftPct}%`,
@@ -212,7 +207,7 @@ export const SmartPiano = memo(function SmartPiano() {
                 zIndex: 2,
               }}
             >
-              <span className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-[10px] font-semibold ${active ? "text-blue-200" : "text-slate-500"}`}>
+              <span className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-[10px] font-semibold ${active ? "text-blue-200" : inChord ? "text-amber-300" : "text-slate-500"}`}>
                 {note}
               </span>
             </div>
