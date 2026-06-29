@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { AdBanner } from "../components/AdBanner/AdBanner";
 import { AudioUnlock } from "../components/AudioUnlock/AudioUnlock";
 import { ChordPadGrid } from "../components/ChordPads/ChordPadGrid";
 import { EffectsPanel } from "../components/EffectsPanel/EffectsPanel";
@@ -45,7 +46,7 @@ export default function StudioPage() {
   }, [currentInstrument]);
 
   return (
-    <main className="min-h-screen text-slate-100">
+    <main className="min-h-screen pb-16 text-slate-100">
       <TransportBar />
 
       <div className="mx-auto grid max-w-7xl gap-4 px-3 py-4 sm:px-4 lg:grid-cols-[1fr_360px]">
@@ -82,6 +83,8 @@ export default function StudioPage() {
           <RecorderControls />
         </aside>
       </div>
+
+      <AdBanner />
     </main>
   );
 }
