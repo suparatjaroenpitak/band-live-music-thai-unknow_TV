@@ -39,7 +39,9 @@ export default function StudioPage() {
   }, [bpm]);
 
   useEffect(() => {
-    void audioEngine.setInstrument(currentInstrument);
+    if (audioEngine.getStatus().status === "ready") {
+      void audioEngine.setInstrument(currentInstrument);
+    }
   }, [currentInstrument]);
 
   return (

@@ -83,7 +83,7 @@ export const GuitarStrings = memo(function GuitarStrings({ strings, chordName, o
 
       if (index !== track.lastString) {
         track.visited.add(index);
-        if (now - track.lastPlayedAt > 85 || track.palmMute) {
+        if (now - track.lastPlayedAt > 60 || track.palmMute) {
           onStringPlay(index, track.palmMute);
           track.lastPlayedAt = now;
         }

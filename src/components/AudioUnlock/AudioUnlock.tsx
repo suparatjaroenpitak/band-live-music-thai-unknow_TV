@@ -4,17 +4,21 @@ import { audioEngine } from "../../audio/ToneEngine";
 import { useStudioStore } from "../../store/useStudioStore";
 import type { AudioUnlockStatus } from "../../types";
 
+const IOS = typeof navigator !== "undefined" && /iP(hone|ad|od)/.test(navigator.userAgent);
+
 export function AudioUnlock() {
   const currentInstrument = useStudioStore((state) => state.currentInstrument);
   const mixer = useStudioStore((state) => state.mixer);
   const bpm = useStudioStore((state) => state.bpm);
   const [audioState, setAudioState] = useState(audioEngine.getStatus());
   const stateRef = useRef(audioState.status);
+  const retryCount = useRef(0);
 
   useEffect(() => {
     return audioEngine.subscribe((status, message) => {
       stateRef.current = status;
       setAudioState({ status, message });
+      if (status === "ready") retryCount.current = 0;
     });
   }, []);
 
@@ -30,12 +34,27 @@ export function AudioUnlock() {
     window.addEventListener("touchstart", unlock, options);
     window.addEventListener("click", unlock, options);
 
+    if (IOS) {
+      const autoRetry = setInterval(() => {
+        if (stateRef.current === "error" && retryCount.current < 3) {
+          retryCount.current++;
+          void audioEngine.unlockFromGesture(currentInstrument, mixer, bpm).catch(() => undefined);
+        }
+      }, 2000);
+      return () => {
+        window.removeEventListener("pointerdown", unlock, options);
+        window.removeEventListener("touchstart", unlock, options);
+        window.removeEventListener("click", unlock, options);
+        clearInterval(autoRetry);
+      };
+    }
+
     return () => {
       window.removeEventListener("pointerdown", unlock, options);
       window.removeEventListener("touchstart", unlock, options);
       window.removeEventListener("click", unlock, options);
     };
-  }, [unlock]);
+  }, [unlock, bpm, currentInstrument, mixer]);
 
   const ready = audioState.status === "ready";
   const busy = audioState.status === "initializing" || audioState.status === "loading";

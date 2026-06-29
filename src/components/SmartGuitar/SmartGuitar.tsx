@@ -1,5 +1,5 @@
 import { ArrowDownUp, Guitar, Hand, Waves } from "lucide-react";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { audioEngine } from "../../audio/ToneEngine";
 import { chordNameToGuitarStrings } from "../../audio/chords";
 import { useStudioStore } from "../../store/useStudioStore";
@@ -18,14 +18,23 @@ export const SmartGuitar = memo(function SmartGuitar() {
   const [lastGesture, setLastGesture] = useState("Ready");
   const selectedChord = useMemo(() => chords.find((chord) => chord.id === currentChord) ?? chords[0], [chords, currentChord]);
   const strings = useMemo(() => chordNameToGuitarStrings(selectedChord.name), [selectedChord.name]);
+  const audioReady = useRef(false);
 
-  const ensureAudio = useCallback(() => audioEngine.ensureReady(currentInstrument, mixer, bpm), [bpm, currentInstrument, mixer]);
+  const ensureAudio = useCallback(() => {
+    if (audioEngine.getStatus().status === "ready") {
+      audioReady.current = true;
+      return;
+    }
+    void audioEngine.ensureReady(currentInstrument, mixer, bpm);
+  }, [bpm, currentInstrument, mixer]);
 
   const playString = useCallback(
-    async (stringIndex: number, palmMute: boolean) => {
-      await ensureAudio();
+    (stringIndex: number, palmMute: boolean) => {
       const note = audioEngine.playGuitarString(selectedChord.name, stringIndex, palmMute);
-      if (!note) return;
+      if (!note) {
+        ensureAudio();
+        return;
+      }
       setLastGesture(palmMute ? "Palm mute" : `String ${stringIndex + 1}`);
       addPerformanceEvent({
         chordName: selectedChord.name,
@@ -39,9 +48,12 @@ export const SmartGuitar = memo(function SmartGuitar() {
   );
 
   const strum = useCallback(
-    async (direction: StrumDirection, palmMute: boolean) => {
-      await ensureAudio();
+    (direction: StrumDirection, palmMute: boolean) => {
       const notes = audioEngine.strumGuitar(selectedChord.name, direction, palmMute);
+      if (notes.length === 0) {
+        ensureAudio();
+        return;
+      }
       setLastGesture(palmMute ? "Palm mute strum" : direction === "down" ? "Down strum" : "Up strum");
       addPerformanceEvent({
         chordName: selectedChord.name,

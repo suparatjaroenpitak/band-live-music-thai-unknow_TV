@@ -11,6 +11,9 @@ interface SustainVoice {
   sampler: any;
 }
 
+const IOS = typeof navigator !== "undefined" && /iP(hone|ad|od)/.test(navigator.userAgent);
+const ANDROID = typeof navigator !== "undefined" && /Android/.test(navigator.userAgent);
+
 class SmartAudioEngine {
   private Tone: ToneModule | null = null;
   private recorder: any = null;
@@ -36,6 +39,7 @@ class SmartAudioEngine {
   private unlockPromise: Promise<void> | null = null;
   private status: AudioUnlockStatus = "locked";
   private statusMessage = "Tap to start audio";
+  private bootAttempts = 0;
 
   getStatus() {
     return { status: this.status, message: this.statusMessage };
@@ -50,21 +54,18 @@ class SmartAudioEngine {
   }
 
   async ensureReady(instrument: InstrumentId, mixer: MixerState, bpm: number) {
-    if (this.status !== "ready") {
-      await this.unlockFromGesture(instrument, mixer, bpm);
-      return;
-    }
-
-    this.setBpm(bpm);
-    this.updateMixer(mixer);
-    await this.setInstrument(instrument);
-  }
-
-  async unlockFromGesture(instrument: InstrumentId, mixer: MixerState, bpm: number) {
     if (this.status === "ready") {
       this.setBpm(bpm);
       this.updateMixer(mixer);
-      await this.setInstrument(instrument);
+      if (this.currentSampler) return;
+    }
+    await this.unlockFromGesture(instrument, mixer, bpm);
+  }
+
+  async unlockFromGesture(instrument: InstrumentId, mixer: MixerState, bpm: number) {
+    if (this.status === "ready" && this.currentSampler) {
+      this.setBpm(bpm);
+      this.updateMixer(mixer);
       return;
     }
 
@@ -106,6 +107,7 @@ class SmartAudioEngine {
 
     this.setStatus("loading", `Loading ${instrument.replaceAll("-", " ")}`);
     const sampler = await this.loadSampler(instrument);
+    if (this.currentInstrument !== instrument) return;
     if (this.currentSampler && this.currentSampler !== sampler) {
       this.currentSampler.releaseAll?.();
       this.currentSampler.disconnect?.();
@@ -214,7 +216,8 @@ class SmartAudioEngine {
   playGuitarString(chordName: string, stringIndex: number, palmMute = false) {
     const string = chordNameToGuitarStrings(chordName)[stringIndex];
     if (!string?.note || !this.Tone || !this.currentSampler || this.status !== "ready") return string?.note ?? null;
-    this.currentSampler.triggerAttackRelease(string.note, palmMute ? "32n" : "8n", this.Tone.now(), palmMute ? 0.58 : 0.84);
+    const now = this.Tone.now();
+    this.currentSampler.triggerAttackRelease(string.note, palmMute ? "32n" : "8n", now, palmMute ? 0.58 : 0.84);
     return string.note;
   }
 
@@ -223,7 +226,8 @@ class SmartAudioEngine {
     const ordered = direction === "down" ? [...strings].reverse() : strings;
     const notes = ordered.map((string) => string.note as string);
     if (!this.Tone || !this.currentSampler || this.status !== "ready") return notes;
-    this.triggerStrum(notes, direction, this.Tone.now(), palmMute);
+    const now = this.Tone.now();
+    this.triggerStrum(notes, direction, now, palmMute);
     return notes;
   }
 
@@ -261,6 +265,7 @@ class SmartAudioEngine {
   }
 
   private async bootAudio(instrument: InstrumentId, mixer: MixerState, bpm: number) {
+    this.bootAttempts++;
     try {
       this.setStatus("initializing", "Starting AudioContext");
       if (!this.Tone) this.Tone = await import("tone");
@@ -273,9 +278,17 @@ class SmartAudioEngine {
       this.setBpm(bpm);
       this.updateMixer(mixer);
       await this.setInstrument(instrument);
+      this.bootAttempts = 0;
       this.setStatus("ready", "Audio Ready");
     } catch (error) {
-      this.setStatus("error", error instanceof Error ? error.message : "Audio failed to start");
+      const msg = error instanceof Error ? error.message : "Audio failed to start";
+      if (this.bootAttempts < 3 && (IOS || ANDROID)) {
+        setTimeout(() => {
+          this.unlockPromise = null;
+          this.unlockFromGesture(instrument, mixer, bpm).catch(() => undefined);
+        }, 300 * this.bootAttempts);
+      }
+      this.setStatus("error", msg);
       throw error;
     }
   }
@@ -290,7 +303,23 @@ class SmartAudioEngine {
     const rawContext = toneContext?.rawContext ?? (toneContext as unknown as AudioContext | undefined);
 
     if (toneContext?.resume) await toneContext.resume();
-    if (rawContext?.state === "suspended") await rawContext.resume();
+    if (rawContext?.state === "suspended") {
+      try {
+        await rawContext.resume();
+      } catch {
+        if (IOS) {
+          await new Promise<void>((resolve) => {
+            const unlock = () => {
+              rawContext.resume().then(() => resolve()).catch(() => resolve());
+              document.removeEventListener("touchend", unlock, true);
+              document.removeEventListener("click", unlock, true);
+            };
+            document.addEventListener("touchend", unlock, { capture: true, once: true });
+            document.addEventListener("click", unlock, { capture: true, once: true });
+          });
+        }
+      }
+    }
   }
 
   private createEffectsChain() {
@@ -301,9 +330,17 @@ class SmartAudioEngine {
     this.pan = new Tone.Panner(0);
     this.dryGain = new Tone.Gain(0.88);
     this.wetGain = new Tone.Gain(0.24);
-    this.chorus = new Tone.Chorus({ frequency: 2.4, delayTime: 3.5, depth: 0.32, wet: 0.1 }).start();
-    this.delay = new Tone.FeedbackDelay({ delayTime: 0.24, feedback: 0.22, wet: 0.12 });
-    this.reverb = new Tone.Reverb({ decay: 3.5, preDelay: 0.015, wet: 1 });
+
+    if (IOS || ANDROID) {
+      this.chorus = new Tone.Chorus({ frequency: 2.4, delayTime: 3.5, depth: 0.32, wet: 0.05 }).start();
+      this.delay = new Tone.FeedbackDelay({ delayTime: 0.24, feedback: 0.18, wet: 0.08 });
+      this.reverb = new Tone.Reverb({ decay: 2.5, preDelay: 0.01, wet: 1 });
+    } else {
+      this.chorus = new Tone.Chorus({ frequency: 2.4, delayTime: 3.5, depth: 0.32, wet: 0.1 }).start();
+      this.delay = new Tone.FeedbackDelay({ delayTime: 0.24, feedback: 0.22, wet: 0.12 });
+      this.reverb = new Tone.Reverb({ decay: 3.5, preDelay: 0.015, wet: 1 });
+    }
+
     this.eq = new Tone.EQ3(0, 0, 0);
     this.compressor = new Tone.Compressor({ threshold: -20, ratio: 3, attack: 0.003, release: 0.25 });
     this.limiter = new Tone.Limiter(-1);
@@ -331,11 +368,12 @@ class SmartAudioEngine {
 
     const Tone = this.Tone;
     const config = SAMPLE_LIBRARY[instrument] ?? SAMPLE_LIBRARY["acoustic-guitar"];
+    const timeoutMs = IOS ? 30_000 : ANDROID ? 25_000 : 20_000;
     let timeoutId = 0;
     let sampler: any;
 
     const promise = new Promise<any>((resolve, reject) => {
-      timeoutId = window.setTimeout(() => reject(new Error(`Sample load timed out: ${instrument}`)), 20_000);
+      timeoutId = window.setTimeout(() => reject(new Error(`Sample load timed out: ${instrument}`)), timeoutMs);
       sampler = new Tone.Sampler({
         urls: config.urls,
         baseUrl: config.baseUrl,
@@ -378,7 +416,7 @@ class SmartAudioEngine {
     if (!this.currentSampler) return;
     const ordered = direction === "down" ? [...notes].reverse() : notes;
     const duration = palmMute ? "32n" : "2n";
-    const gap = palmMute ? 0.014 : 0.026;
+    const gap = palmMute ? 0.012 : (IOS || ANDROID) ? 0.02 : 0.026;
     ordered.forEach((note, index) => this.currentSampler.triggerAttackRelease(note, duration, startTime + index * gap, palmMute ? 0.58 : 0.84));
   }
 
