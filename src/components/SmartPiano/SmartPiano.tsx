@@ -166,7 +166,7 @@ export const SmartPiano = memo(function SmartPiano() {
         </div>
       </div>
 
-      <div className="relative touch-none select-none overflow-hidden rounded-xl border border-white/10 bg-[#0c1018] shadow-pad" style={{ height: "200px" }}>
+      <div className="relative touch-none select-none overflow-hidden rounded-xl border border-white/10 bg-[#0c1018] shadow-pad" style={{ height: "340px" }}>
         {whiteKeys.map(({ note, midi }) => {
           const active = Boolean(activeNotes[note]);
           return (
@@ -186,7 +186,7 @@ export const SmartPiano = memo(function SmartPiano() {
                 zIndex: 1,
               }}
             >
-              <span className={`pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 text-[9px] font-semibold ${active ? "text-blue-700" : "text-slate-400"}`}>
+              <span className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-xs font-semibold ${active ? "text-blue-700" : "text-slate-400"}`}>
                 {note}
               </span>
             </div>
@@ -212,7 +212,7 @@ export const SmartPiano = memo(function SmartPiano() {
                 zIndex: 2,
               }}
             >
-              <span className={`pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 text-[8px] font-semibold ${active ? "text-blue-200" : "text-slate-500"}`}>
+              <span className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-[10px] font-semibold ${active ? "text-blue-200" : "text-slate-500"}`}>
                 {note}
               </span>
             </div>
